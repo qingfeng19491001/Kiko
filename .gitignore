@@ -1,0 +1,22 @@
+# Gradle / build outputs
+.gradle/
+build/
+*/build/
+local.properties
+.kotlin/
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+.cxx/
+
+# iOS
+iosApp/Pods/
+iosApp/*.xcworkspace/xcuserdata/
+iosApp/*.xcodeproj/xcuserdata/
+iosApp/*.xcodeproj/project.xcworkspace/xcuserdata/
+shared/shared.podspec.bak
+
+# reference clones (not part of the project)
+.ref/

@@ -1,0 +1,324 @@
+package com.kuikly.stockchat.ui.components.charts
+
+import com.kuikly.stockchat.domain.analysis.AnalysisEngine
+import com.kuikly.stockchat.domain.model.IntradaySeries
+import com.kuikly.stockchat.domain.model.KLineBar
+import com.kuikly.stockchat.domain.util.NumberFormat
+import com.kuikly.stockchat.ui.theme.AppTheme
+import com.tencent.kuikly.core.base.Color
+import com.tencent.kuikly.core.base.ViewContainer
+import com.tencent.kuikly.core.views.Canvas
+import com.tencent.kuikly.core.views.CanvasContext
+import com.tencent.kuikly.core.views.TextAlign
+import kotlin.math.max
+import kotlin.math.min
+
+/**
+ * 迷你走势图：一条平滑折线 + 渐变填充，用于行情卡片右侧。
+ */
+fun ViewContainer<*, *>.SparklineChart(
+    values: List<Double>,
+    width: Float,
+    height: Float,
+    color: Color,
+    fillAlphaColor: Color,
+) {
+    Canvas({
+        attr { size(width, height) }
+    }) { ctx, w, h ->
+        ChartPainter.sparkline(ctx, values, w, h, color, fillAlphaColor)
+    }
+}
+
+/**
+ * 分时图：价格折线（相对昨收着色）+ 昨收虚线 + 底部成交量柱。
+ */
+fun ViewContainer<*, *>.IntradayChart(
+    series: IntradaySeries,
+    width: Float,
+    height: Float,
+) {
+    Canvas({
+        attr { size(width, height) }
+    }) { ctx, w, h ->
+        ChartPainter.intraday(ctx, series, w, h)
+    }
+}
+
+/**
+ * K 线图：蜡烛 + MA5 / MA10 / MA20 + 成交量 + 价格刻度。
+ */
+fun ViewContainer<*, *>.CandleChart(
+    bars: List<KLineBar>,
+    width: Float,
+    height: Float,
+    showVolume: Boolean = true,
+    showMa: Boolean = true,
+    showAxis: Boolean = true,
+) {
+    Canvas({
+        attr { size(width, height) }
+    }) { ctx, w, h ->
+        ChartPainter.candles(ctx, bars, w, h, showVolume, showMa, showAxis)
+    }
+}
+
+object ChartPainter {
+
+    private val axisText = Color(0xFF9CA3AFL)
+    private val gridLine = Color(0xFFEEF1F5L)
+    private val ma5Color = Color(0xFFF59E0BL)
+    private val ma10Color = Color(0xFF334155L)
+    private val ma20Color = Color(0xFF7C3AEDL)
+
+    fun sparkline(ctx: CanvasContext, values: List<Double>, w: Float, h: Float, color: Color, fill: Color) {
+        if (values.size < 2) return
+        val minV = values.min()
+        val maxV = values.max()
+        val range = (maxV - minV).takeIf { it > 0 } ?: 1.0
+        val padY = 2f
+        val stepX = w / (values.size - 1)
+        fun px(i: Int) = i * stepX
+        fun py(v: Double) = (h - padY) - ((v - minV) / range * (h - padY * 2)).toFloat()
+
+        // 填充
+        ctx.beginPath()
+        ctx.moveTo(0f, h)
+        values.forEachIndexed { i, v -> ctx.lineTo(px(i), py(v)) }
+        ctx.lineTo(w, h)
+        ctx.closePath()
+        val gradient = ctx.createLinearGradient(0f, 0f, 0f, h)
+        gradient.addColorStop(0f, fill)
+        gradient.addColorStop(1f, Color(0x00FFFFFFL))
+        ctx.fillStyle(gradient)
+        ctx.fill()
+
+        // 折线
+        ctx.beginPath()
+        ctx.strokeStyle(color)
+        ctx.lineWidth(1.6f)
+        ctx.lineCapRound()
+        values.forEachIndexed { i, v -> if (i == 0) ctx.moveTo(px(i), py(v)) else ctx.lineTo(px(i), py(v)) }
+        ctx.stroke()
+    }
+
+    fun intraday(ctx: CanvasContext, series: IntradaySeries, w: Float, h: Float) {
+        val ticks = series.ticks
+        if (ticks.size < 2) return
+        val volumeH = h * 0.22f
+        val priceH = h - volumeH - 18f
+        val leftPad = 0f
+        val rightPad = 44f
+        val plotW = w - leftPad - rightPad
+
+        val prices = ticks.map { it.price }
+        val prev = series.prevClose.takeIf { it > 0 } ?: prices.first()
+        val maxDev = max(prices.max() - prev, prev - prices.min()).let { if (it <= 0) prev * 0.005 else it } * 1.08
+        val top = prev + maxDev
+        val bottom = prev - maxDev
+        fun py(v: Double) = 4f + ((top - v) / (top - bottom) * (priceH - 8f)).toFloat()
+        val totalSlots = max(ticks.size, expectedSlots(ticks.size))
+        fun px(i: Int) = leftPad + plotW * i / (totalSlots - 1)
+
+        // 网格
+        ctx.strokeStyle(gridLine)
+        ctx.lineWidth(0.8f)
+        for (i in 0..4) {
+            val y = 4f + (priceH - 8f) * i / 4
+            ctx.beginPath(); ctx.moveTo(leftPad, y); ctx.lineTo(leftPad + plotW, y); ctx.stroke()
+        }
+        // 昨收虚线
+        ctx.setLineDash(listOf(4f, 4f))
+        ctx.strokeStyle(Color(0xFFB0B7C3L))
+        ctx.beginPath(); ctx.moveTo(leftPad, py(prev)); ctx.lineTo(leftPad + plotW, py(prev)); ctx.stroke()
+        ctx.setLineDash(emptyList())
+
+        val last = prices.last()
+        val lineColor = AppTheme.changeColor(last - prev)
+        val fillColor = if (last >= prev) Color(0x3316A34AL) else Color(0x33E5484DL)
+
+        // 填充
+        ctx.beginPath()
+        ctx.moveTo(px(0), py(prev))
+        ticks.forEachIndexed { i, t -> ctx.lineTo(px(i), py(t.price)) }
+        ctx.lineTo(px(ticks.size - 1), py(prev))
+        ctx.closePath()
+        val g = ctx.createLinearGradient(0f, 0f, 0f, priceH)
+        g.addColorStop(0f, fillColor)
+        g.addColorStop(1f, Color(0x00FFFFFFL))
+        ctx.fillStyle(g)
+        ctx.fill()
+
+        // 折线
+        ctx.beginPath()
+        ctx.strokeStyle(lineColor)
+        ctx.lineWidth(1.6f)
+        ticks.forEachIndexed { i, t -> if (i == 0) ctx.moveTo(px(i), py(t.price)) else ctx.lineTo(px(i), py(t.price)) }
+        ctx.stroke()
+
+        // 右侧价格刻度
+        ctx.font(10f, "")
+        ctx.textAlign(TextAlign.LEFT)
+        ctx.fillStyle(axisText)
+        ctx.fillText(NumberFormat.price(top), leftPad + plotW + 4f, 12f)
+        ctx.fillText(NumberFormat.price(bottom), leftPad + plotW + 4f, priceH - 2f)
+        ctx.fillStyle(lineColor)
+        ctx.fillText(NumberFormat.signedPct((maxDev) / prev * 100), leftPad + plotW + 4f, py(prev) - 12f)
+        ctx.fillStyle(axisText)
+        ctx.fillText(NumberFormat.price(prev), leftPad + plotW + 4f, py(prev) + 4f)
+
+        // 时间轴
+        ctx.textAlign(TextAlign.LEFT)
+        ctx.fillText(ticks.first().time, leftPad, priceH + 13f)
+        ctx.textAlign(TextAlign.RIGHT)
+        ctx.fillText(ticks.last().time, leftPad + plotW, priceH + 13f)
+
+        // 成交量（增量）
+        val volumes = ticks.mapIndexed { i, t -> if (i == 0) t.volume else max(0.0, t.volume - ticks[i - 1].volume) }
+        val maxVol = volumes.max().takeIf { it > 0 } ?: 1.0
+        val barW = max(1f, plotW / totalSlots * 0.7f)
+        val volTop = priceH + 18f
+        ticks.forEachIndexed { i, t ->
+            val up = if (i == 0) t.price >= prev else t.price >= ticks[i - 1].price
+            ctx.fillStyle(if (up) Color(0x9916A34AL) else Color(0x99E5484DL))
+            val bh = (volumes[i] / maxVol * (volumeH - 2f)).toFloat()
+            fillRect(ctx, px(i) - barW / 2, volTop + volumeH - bh, barW, bh)
+        }
+    }
+
+    /** 港股 331 / A 股 242 / 美股 391 个分时点 */
+    private fun expectedSlots(size: Int): Int = when {
+        size <= 242 -> 242
+        size <= 331 -> 331
+        else -> 391
+    }
+
+    fun candles(ctx: CanvasContext, bars: List<KLineBar>, w: Float, h: Float, showVolume: Boolean, showMa: Boolean, showAxis: Boolean) {
+        if (bars.isEmpty()) return
+        val rightPad = if (showAxis) 46f else 0f
+        val topPad = if (showMa) 16f else 4f
+        val volumeH = if (showVolume) h * 0.2f else 0f
+        val axisH = if (showAxis) 16f else 0f
+        val priceH = h - volumeH - axisH - topPad
+        val plotW = w - rightPad
+        val count = bars.size
+        val slot = plotW / count
+        val bodyW = max(1.5f, slot * 0.62f)
+
+        val closes = bars.map { it.close }
+        val ma5 = if (showMa) AnalysisEngine.smaSeries(closes, 5) else emptyList()
+        val ma10 = if (showMa) AnalysisEngine.smaSeries(closes, 10) else emptyList()
+        val ma20 = if (showMa) AnalysisEngine.smaSeries(closes, 20) else emptyList()
+
+        var maxP = bars.maxOf { it.high }
+        var minP = bars.minOf { it.low }
+        listOf(ma5, ma10, ma20).forEach { series -> series.filterNotNull().forEach { maxP = max(maxP, it); minP = min(minP, it) } }
+        val range = (maxP - minP).takeIf { it > 0 } ?: maxP * 0.02
+        fun py(v: Double) = topPad + ((maxP - v) / range * priceH).toFloat()
+        fun cx(i: Int) = slot * i + slot / 2
+
+        // 网格 + 刻度
+        ctx.lineWidth(0.8f)
+        ctx.strokeStyle(gridLine)
+        ctx.font(10f, "")
+        ctx.textAlign(TextAlign.LEFT)
+        for (i in 0..4) {
+            val y = topPad + priceH * i / 4
+            ctx.beginPath(); ctx.moveTo(0f, y); ctx.lineTo(plotW, y); ctx.stroke()
+            if (showAxis) {
+                ctx.fillStyle(axisText)
+                val value = maxP - range * i / 4
+                ctx.fillText(NumberFormat.price(value), plotW + 4f, y + (if (i == 0) 10f else if (i == 4) -2f else 4f))
+            }
+        }
+
+        // 蜡烛
+        bars.forEachIndexed { i, bar ->
+            val color = if (bar.isUp) AppTheme.up else AppTheme.down
+            ctx.strokeStyle(color)
+            ctx.fillStyle(color)
+            ctx.lineWidth(1f)
+            val x = cx(i)
+            ctx.beginPath(); ctx.moveTo(x, py(bar.high)); ctx.lineTo(x, py(bar.low)); ctx.stroke()
+            val top = py(max(bar.open, bar.close))
+            val bottom = py(min(bar.open, bar.close))
+            val bodyH = max(1f, bottom - top)
+            fillRect(ctx, x - bodyW / 2, top, bodyW, bodyH)
+        }
+
+        // 均线
+        if (showMa) {
+            drawSeries(ctx, ma5, ma5Color, ::cx, ::py)
+            drawSeries(ctx, ma10, ma10Color, ::cx, ::py)
+            drawSeries(ctx, ma20, ma20Color, ::cx, ::py)
+            ctx.font(10f, "")
+            ctx.textAlign(TextAlign.LEFT)
+            var x = 2f
+            listOf(
+                Triple("MA5", ma5.lastOrNull(), ma5Color),
+                Triple("MA10", ma10.lastOrNull(), ma10Color),
+                Triple("MA20", ma20.lastOrNull(), ma20Color),
+            ).forEach { (label, value, color) ->
+                ctx.fillStyle(color)
+                val text = "$label ${NumberFormat.price(value)}"
+                ctx.fillText(text, x, 11f)
+                x += ctx.measureText(text).width + 10f
+            }
+        }
+
+        // 成交量
+        if (showVolume) {
+            val maxVol = bars.maxOf { it.volume }.takeIf { it > 0 } ?: 1.0
+            val volTop = topPad + priceH + 6f
+            bars.forEachIndexed { i, bar ->
+                ctx.fillStyle(if (bar.isUp) Color(0x9916A34AL) else Color(0x99E5484DL))
+                val bh = (bar.volume / maxVol * (volumeH - 6f)).toFloat()
+                fillRect(ctx, cx(i) - bodyW / 2, volTop + (volumeH - 6f) - bh, bodyW, bh)
+            }
+        }
+
+        // 时间轴
+        if (showAxis) {
+            ctx.fillStyle(axisText)
+            ctx.font(10f, "")
+            val y = h - 3f
+            ctx.textAlign(TextAlign.LEFT)
+            ctx.fillText(shortDate(bars.first().date), 0f, y)
+            if (count > 2) {
+                ctx.textAlign(TextAlign.CENTER)
+                ctx.fillText(shortDate(bars[count / 2].date), plotW / 2, y)
+            }
+            ctx.textAlign(TextAlign.RIGHT)
+            ctx.fillText(shortDate(bars.last().date), plotW, y)
+        }
+    }
+
+    private fun drawSeries(ctx: CanvasContext, series: List<Double?>, color: Color, cx: (Int) -> Float, py: (Double) -> Float) {
+        ctx.beginPath()
+        ctx.strokeStyle(color)
+        ctx.lineWidth(1.2f)
+        var started = false
+        series.forEachIndexed { i, v ->
+            if (v == null) return@forEachIndexed
+            if (!started) { ctx.moveTo(cx(i), py(v)); started = true } else ctx.lineTo(cx(i), py(v))
+        }
+        if (started) ctx.stroke()
+    }
+
+    private fun fillRect(ctx: CanvasContext, x: Float, y: Float, w: Float, h: Float) {
+        ctx.beginPath()
+        ctx.moveTo(x, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h)
+        ctx.closePath()
+        ctx.fill()
+    }
+
+    /** 2024-06-21 → 06-21；2024-06 → 24-06 */
+    private fun shortDate(date: String): String {
+        val cleaned = date.replace('/', '-')
+        return when {
+            cleaned.length >= 10 -> cleaned.substring(5, 10)
+            cleaned.length >= 7 -> cleaned.substring(2, 7)
+            else -> cleaned
+        }
+    }
+}
