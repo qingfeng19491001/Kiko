@@ -36,7 +36,6 @@ import com.tencent.kuikly.core.views.ActivityIndicator
 import com.tencent.kuikly.core.views.List
 import com.tencent.kuikly.core.views.Text
 import com.tencent.kuikly.core.views.View
-import com.tencent.kuiklybase.kline.view.KLineChart
 
 /**
  * 个股 / 指数详情页：上半屏固定报价与走势，下半屏滚动解读与指标。
@@ -192,19 +191,18 @@ internal class StockDetailPage : Pager() {
                                         View {
                                             attr { flex(1f) }
                                             if (ctx.vm.barsJson.isNotEmpty()) {
-                                                KLineChart {
-                                                    attr {
-                                                        flex(1f)
-                                                        symbol(ctx.instrument.displayCode, ctx.instrument.name)
-                                                        period(1, ctx.vm.period.apiKey)
-                                                        mode("compact")
-                                                        theme("light")
-                                                        bars(ctx.vm.barsJson)
-                                                        config(KLINE_CONFIG)
-                                                    }
-                                                    event {
-                                                        onError { code, message -> println("KLineChart error: $code $message") }
-                                                    }
+                                                PlatformKLineChart(
+                                                    flexValue = 1f,
+                                                    symbolCode = ctx.instrument.displayCode,
+                                                    symbolName = ctx.instrument.name,
+                                                    periodValue = 1,
+                                                    periodUnit = ctx.vm.period.apiKey,
+                                                    modeName = "compact",
+                                                    themeName = "light",
+                                                    barsJson = ctx.vm.barsJson,
+                                                    configJson = KLINE_CONFIG,
+                                                ) { code, message ->
+                                                    println("KLineChart error: $code $message")
                                                 }
                                             } else {
                                                 ChartPlaceholder("暂无 K 线数据", loading = false)

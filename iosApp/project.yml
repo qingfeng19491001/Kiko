@@ -1,0 +1,45 @@
+name: KuiklyStockChat
+options:
+  bundleIdPrefix: com.kuikly
+  deploymentTarget:
+    iOS: '14.1'
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+  groupSortPosition: top
+
+settings:
+  base:
+    IPHONEOS_DEPLOYMENT_TARGET: '14.1'
+    SWIFT_VERSION: '5.0'
+    CLANG_ENABLE_OBJC_ARC: YES
+    CLANG_ENABLE_MODULES: YES
+    GCC_C_LANGUAGE_STANDARD: gnu11
+    CLANG_CXX_LANGUAGE_STANDARD: 'gnu++17'
+    ENABLE_BITCODE: NO
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGNING_REQUIRED: NO
+    CODE_SIGNING_ALLOWED: NO
+    DEVELOPMENT_TEAM: ''
+    PRODUCT_NAME: KuiklyStockChat
+    MARKETING_VERSION: '1.0.0'
+    CURRENT_PROJECT_VERSION: '1'
+
+targets:
+  KuiklyStockChat:
+    type: application
+    platform: iOS
+    deploymentTarget: '14.1'
+    sources:
+      - path: KuiklyStockChat
+    settings:
+      base:
+        INFOPLIST_FILE: KuiklyStockChat/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.kuikly.stockchat
+        TARGETED_DEVICE_FAMILY: '1,2'
+        OTHER_LDFLAGS:
+          - "$(inherited)"
+          - "-ObjC"
+        CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES: YES
+        GCC_PREPROCESSOR_DEFINITIONS:
+          - "DEBUG=1"
+          - "$(inherited)"

@@ -41,9 +41,7 @@ kotlin {
         commonMain.dependencies {
             implementation("com.tencent.kuikly-open:core:$kuiklyVersion")
             implementation("com.tencent.kuikly-open:core-annotations:$kuiklyVersion")
-            // AI 回复 Markdown 渲染（含流式增量渲染）
-            implementation("com.tencent.kuiklybase:KuiklyMarkdown:$kuiklyMarkdownVersion")
-            // 专业 K 线图（扩展原生 View）
+            // 专业 K 线图 KMP 共享部分
             implementation("io.github.qingfeng19491001:kuiklyklinechart:$kuiklyKLineVersion")
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.1")
             implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
@@ -53,7 +51,14 @@ kotlin {
         }
         androidMain.dependencies {
             api("com.tencent.kuikly-open:core-render-android:$kuiklyVersion")
+            // AI 回复 Markdown 渲染（含流式增量渲染）— 仅 Android/iOS 使用
+            implementation("com.tencent.kuiklybase:KuiklyMarkdown:$kuiklyMarkdownVersion")
+            // K 线图 Android 原生渲染部分
             api("io.github.qingfeng19491001:kuiklyklinechartandroid:$kuiklyKLineVersion")
+        }
+        iosMain.dependencies {
+            // AI 回复 Markdown 渲染（含流式增量渲染）— 仅 Android/iOS 使用
+            implementation("com.tencent.kuiklybase:KuiklyMarkdown:$kuiklyMarkdownVersion")
         }
     }
 }

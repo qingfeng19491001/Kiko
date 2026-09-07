@@ -12,11 +12,26 @@ interface HttpClient {
      * @param callback text 为原始响应字符串（JSON 或纯文本），失败时为 null
      */
     fun get(url: String, params: Map<String, String> = emptyMap(), callback: (text: String?, error: String?) -> Unit)
+
+    /**
+     * 发送 JSON body 的 POST 请求。
+     * @param body JSON 请求体（将作为 request body 发送）
+     * @param headers 自定义请求头（如 Authorization）
+     * @param timeoutSeconds 超时时间（秒）
+     * @param callback text 为原始响应字符串，失败时为 null
+     */
+    fun postJson(
+        url: String,
+        body: JSONObject,
+        headers: Map<String, String> = emptyMap(),
+        timeoutSeconds: Int = 30,
+        callback: (text: String?, error: String?) -> Unit,
+    )
 }
 
 /**
  * 基于 Kuikly [NetworkModule] 的实现。
- * NetworkModule 对非 JSON 响应会包装为 `{"data": "<raw>"}`，这里统一还原为字符串。
+ * NetworkModule 对非 JSON 回包会包装为 `{"data": "<raw>"}`，这里统一还原为字符串。
  */
 class KuiklyHttpClient(private val pager: IPager) : HttpClient {
 
@@ -28,6 +43,28 @@ class KuiklyHttpClient(private val pager: IPager) : HttpClient {
             put("User-Agent", "Mozilla/5.0 (StockChat Kuikly Demo)")
         }
         module.httpRequest(url, false, param, headers, null, 15) { data, success, errorMsg, _ ->
+            if (!success) {
+                callback(null, errorMsg.ifEmpty { "network error" })
+                return@httpRequest
+            }
+            val text = if (data.length() == 1 && data.has("data")) data.optString("data") else data.toString()
+            callback(text, null)
+        }
+    }
+
+    override fun postJson(
+        url: String,
+        body: JSONObject,
+        headers: Map<String, String>,
+        timeoutSeconds: Int,
+        callback: (String?, String?) -> Unit,
+    ) {
+        val module = pager.acquireModule<NetworkModule>(NetworkModule.MODULE_NAME)
+        val headerJson = JSONObject().apply {
+            put("Content-Type", "application/json")
+            headers.forEach { (k, v) -> put(k, v) }
+        }
+        module.httpRequest(url, true, body, headerJson, null, timeoutSeconds) { data, success, errorMsg, _ ->
             if (!success) {
                 callback(null, errorMsg.ifEmpty { "network error" })
                 return@httpRequest

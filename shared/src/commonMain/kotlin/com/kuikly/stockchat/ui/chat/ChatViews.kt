@@ -16,13 +16,16 @@ import com.kuikly.stockchat.ui.components.charts.SparklineChart
 import com.kuikly.stockchat.ui.theme.AppTheme
 import com.tencent.kuikly.core.base.Border
 import com.tencent.kuikly.core.base.BorderStyle
+import com.tencent.kuikly.core.base.BoxShadow
 import com.tencent.kuikly.core.base.Color
 import com.tencent.kuikly.core.base.ViewContainer
 import com.tencent.kuikly.core.base.ViewRef
+import com.tencent.kuikly.core.base.attr.ImageUri
 import com.tencent.kuikly.core.directives.velse
 import com.tencent.kuikly.core.directives.vfor
 import com.tencent.kuikly.core.directives.vif
 import com.tencent.kuikly.core.views.ActivityIndicator
+import com.tencent.kuikly.core.views.Image
 import com.tencent.kuikly.core.views.Input
 import com.tencent.kuikly.core.views.InputView
 import com.tencent.kuikly.core.views.Text
@@ -44,39 +47,53 @@ val quickPrompts: List<QuickPrompt> = listOf(
 
 fun ViewContainer<*, *>.ChatNavBar(
     statusBarHeight: Float,
+    ttsEnabled: Boolean,
     onMenu: () -> Unit,
-    onNewChat: () -> Unit,
+    onTts: () -> Unit,
 ) {
     View {
         attr {
+            backgroundColor(Color(0xFFFFFFFFL))
             paddingTop(statusBarHeight)
-            backgroundColor(AppTheme.surface)
         }
         View {
             attr {
                 height(AppTheme.navBarHeight)
                 flexDirectionRow()
                 alignItemsCenter()
-                paddingLeft(8f)
-                paddingRight(8f)
+                paddingLeft(16f)
+                paddingRight(16f)
             }
-            IconButton(IconKind.MENU, iconSize = 20f, onClick = onMenu)
+            IconButton(
+                kind = IconKind.MENU,
+                size = 40f,
+                iconSize = 20f,
+                color = AppTheme.textPrimary,
+                background = Color.WHITE,
+                shadow = true,
+                onClick = onMenu,
+            )
             View {
                 attr { flex(1f); flexDirectionRow(); alignItemsCenter(); justifyContentCenter() }
-                BrandMark(22f)
                 Text {
                     attr {
                         text("StockChat")
-                        fontSize(16f)
+                        fontSize(17f)
                         fontWeight700()
                         color(AppTheme.textPrimary)
-                        marginLeft(7f)
                     }
                 }
             }
-            IconButton(IconKind.PLUS, iconSize = 20f, onClick = onNewChat)
+            IconButton(
+                kind = if (ttsEnabled) IconKind.SPEAKER else IconKind.SPEAKER_OFF,
+                size = 40f,
+                iconSize = 20f,
+                color = AppTheme.textPrimary,
+                background = Color.WHITE,
+                shadow = true,
+                onClick = onTts,
+            )
         }
-        View { attr { height(0.5f); backgroundColor(AppTheme.divider) } }
     }
 }
 
@@ -90,109 +107,151 @@ fun ViewContainer<*, *>.WelcomeView(
     onPrompt: (String) -> Unit,
     onOpenInstrument: (String) -> Unit,
 ) {
-    val tileWidth = (pageWidth - AppTheme.pageHorizontalPadding * 2 - 16f) / 3
     View {
-        attr { paddingLeft(AppTheme.pageHorizontalPadding); paddingRight(AppTheme.pageHorizontalPadding) }
-
-        // 标题区
-        Spacer(20f)
-        Text {
-            attr {
-                text("今天想了解什么？")
-                fontSize(24f)
-                fontWeight700()
-                color(AppTheme.textPrimary)
-            }
-        }
-        Text {
-            attr {
-                text("覆盖港股 · A 股 · 美股实时行情，支持走势判断、标的对比、风险提示与金融知识问答")
-                fontSize(13f)
-                lineHeight(20f)
-                color(AppTheme.textSecondary)
-                marginTop(6f)
-            }
+        attr {
+            paddingLeft(AppTheme.pageHorizontalPadding)
+            paddingRight(AppTheme.pageHorizontalPadding)
+            flex(1f)
         }
 
-        // 市场概览
-        SectionHeader("市场概览", "腾讯证券实时行情")
-        vif({ vm.indexSnapshots.isEmpty() }) {
-            View {
-                attr { flexDirectionRow(); justifyContentSpaceBetween() }
-                repeat(3) { IndexTileSkeleton(tileWidth) }
-            }
-        }
-        velse {
-            View {
-                attr { flexDirectionRow(); justifyContentSpaceBetween() }
-                vfor({ vm.indexSnapshots }) { snap ->
-                    IndexTile(snap, tileWidth) { onOpenInstrument(snap.quote.instrument.key) }
-                }
-            }
-        }
-
-        // 推荐问题
-        SectionHeader("试着问我", "")
+        // 机器人头像
         View {
-            attr {
-                backgroundColor(AppTheme.surface)
-                border(Border(1f, BorderStyle.SOLID, AppTheme.border))
-                borderRadius(AppTheme.cardRadius)
-            }
-            quickPrompts.forEachIndexed { index, item ->
-                View {
+            attr { allCenter(); marginTop(18f) }
+            View {
+                attr {
+                    size(112f, 112f)
+                    borderRadius(56f)
+                    allCenter()
+                    backgroundColor(AppTheme.accentSoft)
+                }
+                Image {
                     attr {
-                        flexDirectionRow(); alignItemsCenter()
-                        height(46f)
-                        paddingLeft(14f); paddingRight(12f)
+                        size(112f, 112f)
+                        borderRadius(56f)
+                        src(ImageUri.commonAssets("robot.png"))
                     }
-                    event { click { onPrompt(item.prompt) } }
-                    Text {
-                        attr {
-                            text(item.category)
-                            fontSize(11f)
-                            fontWeight500()
-                            color(AppTheme.textTertiary)
-                            width(30f)
-                        }
-                    }
-                    Text {
-                        attr {
-                            text(item.prompt)
-                            fontSize(14f)
-                            color(AppTheme.textPrimary)
-                            flex(1f)
-                        }
-                    }
-                    Icon(IconKind.CHEVRON_RIGHT, 14f, AppTheme.textTertiary)
-                }
-                if (index != quickPrompts.lastIndex) {
-                    View { attr { height(0.5f); backgroundColor(AppTheme.divider); marginLeft(14f) } }
                 }
             }
         }
 
-        // 热门标的
-        SectionHeader("热门标的", "点击查看详情")
+        // 标题
         View {
-            attr {
-                backgroundColor(AppTheme.surface)
-                border(Border(1f, BorderStyle.SOLID, AppTheme.border))
-                borderRadius(AppTheme.cardRadius)
-            }
-            vif({ vm.hotSnapshots.isEmpty() }) {
-                View {
-                    attr { height(120f); allCenter() }
-                    ActivityIndicator { attr { isGrayStyle(true) } }
+            attr { alignItemsCenter(); marginTop(20f) }
+            Text {
+                attr {
+                    text("AI 股票助手")
+                    fontSize(26f)
+                    fontWeight700()
+                    color(AppTheme.textPrimary)
                 }
             }
-            velse {
-                vfor({ vm.hotSnapshots }) { snap ->
-                    HotStockRow(snap, pageWidth) { onOpenInstrument(snap.quote.instrument.key) }
+            Text {
+                attr {
+                    text("帮你看懂行情、做分析、给建议")
+                    fontSize(14f)
+                    color(AppTheme.textSecondary)
+                    marginTop(8f)
                 }
             }
         }
+
+        // 功能卡片 2x2 网格
+        Spacer(32f)
+        val cardGap = 12f
+        val cardWidth = (pageWidth - AppTheme.pageHorizontalPadding * 2 - cardGap) / 2
+        View {
+            attr { flexDirectionRow(); flexWrapWrap() }
+            FunctionCard(
+                width = cardWidth,
+                icon = IconKind.CHART,
+                iconBg = Color(0xFFEDF1FEL),
+                iconColor = AppTheme.accent,
+                title = "行情分析",
+                subtitle = "洞察市场走势",
+            ) { onPrompt("腾讯控股后市如何？") }
+            View { attr { width(cardGap) } }
+            FunctionCard(
+                width = cardWidth,
+                icon = IconKind.COMPARE,
+                iconBg = Color(0xFFE6F4EBL),
+                iconColor = Color(0xFF12924AL),
+                title = "对比行情",
+                subtitle = "多股对比分析",
+            ) { onPrompt("比亚迪 vs 特斯拉 对比") }
+        }
+        View { attr { height(cardGap) } }
+        View {
+            attr { flexDirectionRow(); flexWrapWrap() }
+            FunctionCard(
+                width = cardWidth,
+                icon = IconKind.TREND_UP,
+                iconBg = Color(0xFFEEF6FFL),
+                iconColor = Color(0xFF2563EBL),
+                title = "趋势判断",
+                subtitle = "把握趋势机会",
+            ) { onPrompt("恒生指数短期走势判断") }
+            View { attr { width(cardGap) } }
+            FunctionCard(
+                width = cardWidth,
+                icon = IconKind.ALERT,
+                iconBg = Color(0xFFFFF1EBL),
+                iconColor = Color(0xFFEA580CL),
+                title = "风险提醒",
+                subtitle = "识别风险信号",
+            ) { onPrompt("阿里巴巴有哪些风险") }
+        }
+
         Spacer(24f)
+    }
+}
+
+/** 首页功能入口卡片 */
+private fun ViewContainer<*, *>.FunctionCard(
+    width: Float,
+    icon: IconKind,
+    iconBg: Color,
+    iconColor: Color,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    View {
+        attr {
+            width(width)
+            height(104f)
+            backgroundColor(AppTheme.surface)
+            border(Border(1f, BorderStyle.SOLID, AppTheme.border))
+            borderRadius(AppTheme.cardRadius)
+            padding(16f)
+            justifyContentCenter()
+        }
+        event { click { onClick() } }
+        View {
+            attr {
+                size(40f, 40f)
+                borderRadius(10f)
+                backgroundColor(iconBg)
+                allCenter()
+            }
+            Icon(icon, 22f, iconColor, 1.8f)
+        }
+        Text {
+            attr {
+                text(title)
+                fontSize(15f)
+                fontWeight600()
+                color(AppTheme.textPrimary)
+                marginTop(10f)
+            }
+        }
+        Text {
+            attr {
+                text(subtitle)
+                fontSize(12f)
+                color(AppTheme.textTertiary)
+                marginTop(2f)
+            }
+        }
     }
 }
 
@@ -459,39 +518,57 @@ fun ViewContainer<*, *>.ComposerView(
     onStop: () -> Unit,
     onKeyboardHeight: (Float) -> Unit,
     onInputRef: (ViewRef<InputView>) -> Unit,
+    onAttachClick: () -> Unit,
+    onVoiceClick: () -> Unit,
 ) {
     View {
-        attr { backgroundColor(AppTheme.surface) }
-        View { attr { height(0.5f); backgroundColor(AppTheme.divider) } }
+        attr { backgroundColor(Color(0xFFFFFFFFL)) }
         View {
             attr {
                 flexDirectionRow()
                 alignItemsCenter()
-                paddingLeft(12f); paddingRight(12f); paddingTop(10f)
+                paddingLeft(16f); paddingRight(16f); paddingTop(10f)
             }
+            // Kimi 式大胶囊：+ / 输入 / 语音·发送 收进同一颗 pill
             View {
                 attr {
                     flex(1f)
-                    height(AppTheme.composerHeight - 6f)
-                    borderRadius(10f)
-                    backgroundColor(AppTheme.surfaceMuted)
-                    border(Border(1f, BorderStyle.SOLID, AppTheme.border))
+                    minHeight(56f)
+                    borderRadius(28f)
+                    backgroundColor(Color.WHITE)
+                    boxShadow(BoxShadow(0f, 2f, 8f, Color(0x0F000000L)))
+                    border(Border(0.5f, BorderStyle.SOLID, Color(0x0F000000L)))
                     flexDirectionRow()
                     alignItemsCenter()
-                    paddingLeft(14f)
-                    paddingRight(12f)
+                    paddingLeft(8f)
+                    paddingRight(8f)
+                    paddingTop(6f)
+                    paddingBottom(6f)
+                }
+                View {
+                    attr {
+                        size(36f, 36f)
+                        borderRadius(18f)
+                        allCenter()
+                        backgroundColor(AppTheme.surfaceMuted)
+                    }
+                    event { click { onAttachClick() } }
+                    Icon(IconKind.PLUS, 18f, AppTheme.textSecondary, 1.8f)
                 }
                 Input {
                     ref { onInputRef(it) }
                     attr {
                         flex(1f)
-                        height(AppTheme.composerHeight - 8f)
-                        fontSize(15f)
+                        minHeight(24f)
+                        maxHeight(96f)
+                        fontSize(16f)
                         color(AppTheme.textPrimary)
                         placeholder("输入股票名称、代码或问题")
                         placeholderColor(AppTheme.textTertiary)
                         returnKeyTypeSend()
                         maxTextLength(200)
+                        marginLeft(8f)
+                        marginRight(8f)
                     }
                     event {
                         textDidChange { vm.inputText = it.text }
@@ -499,32 +576,42 @@ fun ViewContainer<*, *>.ComposerView(
                         keyboardHeightChange { onKeyboardHeight(it.height) }
                     }
                 }
-            }
-            HSpacer(8f)
-            View {
-                attr {
-                    size(AppTheme.composerHeight - 6f, AppTheme.composerHeight - 6f)
-                    borderRadius(10f)
-                    allCenter()
-                    backgroundColor(
-                        when {
-                            vm.isGenerating -> AppTheme.down
-                            vm.inputText.isNotBlank() -> AppTheme.ink
-                            else -> AppTheme.primarySoft
-                        },
-                    )
-                }
-                event {
-                    click {
-                        if (vm.isGenerating) onStop() else onSend(vm.inputText)
+                View {
+                    attr {
+                        size(36f, 36f)
+                        borderRadius(18f)
+                        allCenter()
+                        backgroundColor(
+                            when {
+                                vm.isGenerating -> AppTheme.ink
+                                vm.inputText.isNotBlank() -> AppTheme.ink
+                                else -> Color.TRANSPARENT
+                            },
+                        )
+                    }
+                    event {
+                        click {
+                            when {
+                                vm.isGenerating -> onStop()
+                                vm.inputText.isNotBlank() -> onSend(vm.inputText)
+                                else -> onVoiceClick()
+                            }
+                        }
+                    }
+                    vif({ vm.isGenerating }) { Icon(IconKind.STOP, 14f, Color.WHITE) }
+                    velse {
+                        vif({ vm.inputText.isNotBlank() }) {
+                            Icon(IconKind.ARROW_UP, 18f, Color.WHITE, 2.4f)
+                        }
+                        velse {
+                            Icon(IconKind.VOICE, 20f, AppTheme.textSecondary, 1.8f)
+                        }
                     }
                 }
-                vif({ vm.isGenerating }) { Icon(IconKind.STOP, 16f, Color.WHITE) }
-                velse { Icon(IconKind.ARROW_UP, 20f, Color.WHITE, 2.2f) }
             }
         }
         View {
-            attr { alignItemsCenter(); paddingTop(6f); paddingBottom(8f) }
+            attr { alignItemsCenter(); paddingTop(4f); paddingBottom(8f) }
             Text {
                 attr {
                     text("行情数据来自腾讯证券，AI 内容仅供参考，不构成投资建议")

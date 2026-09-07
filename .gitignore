@@ -4,6 +4,13 @@ build/
 */build/
 local.properties
 .kotlin/
+.hvigor/
+
+# local AI / notes
+.workbuddy/
+
+# local secrets (copy from AiSecrets.kt.example)
+shared/src/commonMain/kotlin/com/kuikly/stockchat/data/ai/AiSecrets.kt
 
 # IDE
 .idea/

@@ -35,17 +35,17 @@ object AppTheme {
     val purple = Color(0xFF6D28D9L)
     val purpleSoft = Color(0xFFF3EEFDL)
 
-    // 中性色
-    val background = Color(0xFFF6F7F9L)
+    // 中性色（对齐 Kimi：整页近白，白控件靠轻阴影浮起，不要灰条分区）
+    val background = Color(0xFFFAFAFAL)
     val surface = Color.WHITE
-    val surfaceMuted = Color(0xFFF6F7F9L)
+    val surfaceMuted = Color(0xFFF2F3F5L)
     val divider = Color(0xFFEBEDF0L)
-    val border = Color(0xFFE2E5EAL)
+    val border = Color(0xFFE8E8EAL)
     val textPrimary = Color(0xFF0F172AL)
     val textSecondary = Color(0xFF475569L)
     val textTertiary = Color(0xFF94A3B8L)
     val textOnPrimary = Color.WHITE
-    val scrim = Color(0x59000000L)
+    val scrim = Color(0, 0, 0, 0.4f)
 
     // 聊天气泡：用户消息浅灰气泡；AI 回复不加底色，直接铺在页面上
     val userBubble = Color(0xFFF1F3F6L)

@@ -33,6 +33,7 @@ class ChatViewModel(
     var isGenerating by observable(false)
     var showHistory by observable(false)
     var inputText by observable("")
+    var ttsEnabled by observable(false)
 
     /** 是否有消息（欢迎页 / 对话页切换） */
     var hasConversation by observable(false)
@@ -130,6 +131,7 @@ class ChatViewModel(
         currentConversationId = ""
         currentCreatedAt = 0L
         hasConversation = false
+        showHistory = false
     }
 
     // endregion

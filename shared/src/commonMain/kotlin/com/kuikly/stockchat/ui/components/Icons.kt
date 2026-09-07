@@ -14,7 +14,7 @@ import kotlin.math.sin
 enum class IconKind {
     MENU, PLUS, SEND, ARROW_UP, BACK, CLOSE, CHEVRON_RIGHT, CHEVRON_DOWN,
     STAR, STAR_FILLED, SHARE, CLOCK, TRASH, SPARKLE, REFRESH, TREND_UP, ALERT, CHART, COMPARE, BOOK,
-    STOP, WIFI_OFF, MESSAGE, CANDLE, SEARCH,
+    STOP, WIFI_OFF, MESSAGE, CANDLE, SEARCH, VOICE, SPEAKER, SPEAKER_OFF,
 }
 
 fun ViewContainer<*, *>.Icon(
@@ -195,6 +195,36 @@ object IconPainter {
                 path(ctx) {
                     moveTo(4.5f * u, 5.5f * u); lineTo(19.5f * u, 5.5f * u); lineTo(19.5f * u, 15.5f * u); lineTo(10 * u, 15.5f * u)
                     lineTo(6 * u, 19 * u); lineTo(6 * u, 15.5f * u); lineTo(4.5f * u, 15.5f * u); closePath()
+                }
+            }
+            IconKind.VOICE -> {
+                // 声波：5 根竖线，中间最高、两侧渐低（Kimi 语音输入图标）
+                line(ctx, 5 * u, 10 * u, 5 * u, 14 * u)
+                line(ctx, 8 * u, 7.5f * u, 8 * u, 16.5f * u)
+                line(ctx, 11 * u, 5 * u, 11 * u, 19 * u)
+                line(ctx, 14 * u, 7.5f * u, 14 * u, 16.5f * u)
+                line(ctx, 17 * u, 10 * u, 17 * u, 14 * u)
+            }
+            IconKind.SPEAKER, IconKind.SPEAKER_OFF -> {
+                ctx.beginPath()
+                ctx.moveTo(3.5f * u, 9 * u)
+                ctx.lineTo(8 * u, 9 * u)
+                ctx.lineTo(13 * u, 4.5f * u)
+                ctx.lineTo(13 * u, 19.5f * u)
+                ctx.lineTo(8 * u, 15 * u)
+                ctx.lineTo(3.5f * u, 15 * u)
+                ctx.closePath()
+                ctx.stroke()
+                if (kind == IconKind.SPEAKER) {
+                    ctx.beginPath()
+                    ctx.arc(13.5f * u, 12 * u, 3.6f * u, -0.85f, 0.85f, false)
+                    ctx.stroke()
+                    ctx.beginPath()
+                    ctx.arc(13.5f * u, 12 * u, 6.6f * u, -0.95f, 0.95f, false)
+                    ctx.stroke()
+                } else {
+                    line(ctx, 16 * u, 8 * u, 21.5f * u, 16.5f * u)
+                    line(ctx, 21.5f * u, 8 * u, 16 * u, 16.5f * u)
                 }
             }
         }

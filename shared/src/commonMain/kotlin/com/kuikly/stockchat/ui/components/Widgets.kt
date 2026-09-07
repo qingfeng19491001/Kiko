@@ -240,13 +240,14 @@ fun ViewContainer<*, *>.PrimaryButton(
     }
 }
 
-/** 圆形图标按钮 */
+/** 圆形图标按钮。shadow=true 时加轻阴影，对齐 Kimi 顶部悬浮圆钮。 */
 fun ViewContainer<*, *>.IconButton(
     kind: IconKind,
     size: Float = 40f,
     iconSize: Float = 22f,
     color: Color = AppTheme.textPrimary,
     background: Color? = null,
+    shadow: Boolean = false,
     onClick: () -> Unit,
 ) {
     View {
@@ -255,6 +256,10 @@ fun ViewContainer<*, *>.IconButton(
             borderRadius(size / 2)
             allCenter()
             background?.let { backgroundColor(it) }
+            if (shadow) {
+                boxShadow(BoxShadow(0f, 1f, 4f, Color(0x14000000L)))
+                border(Border(0.5f, BorderStyle.SOLID, Color(0x0F000000L)))
+            }
         }
         event { click { onClick() } }
         Icon(kind, iconSize, color)
