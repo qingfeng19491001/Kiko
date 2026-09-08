@@ -1,0 +1,3 @@
+[submodule "ohosApp/KuiklyKLineChart"]
+	path = ohosApp/KuiklyKLineChart
+	url = https://github.com/qingfeng19491001/KuiklyKLineChart.git

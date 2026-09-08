@@ -46,6 +46,9 @@ kotlin {
                 // 鸿蒙端必须使用 -ohos 定制版（Kotlin 工具链差异）
                 implementation("com.tencent.kuikly-open:core:${Version.getKuiklyOhosVersion()}")
                 implementation("com.tencent.kuikly-open:core-annotations:${Version.getKuiklyOhosVersion()}")
+                // 官方 KuiklyMarkdown 与 KuiklyKLineChart 均提供 ohosArm64 实现。
+                implementation("com.tencent.kuiklybase:KuiklyMarkdown:1.0.6-2.0.21-ohos")
+                implementation("io.github.qingfeng19491001:kuiklyklinechart:0.1.0-2.0.21-KBA-010")
             }
         }
         val commonTest by getting {

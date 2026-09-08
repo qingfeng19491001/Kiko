@@ -1,10 +1,10 @@
 package com.kuikly.stockchat.app
 
 import com.tencent.kuikly.core.base.ViewContainer
+import com.tencent.kuiklybase.kline.view.KLineChart
 
 /**
- * OHOS 占位实现：KLine 模块未提供 ohos_arm64 klib，因此用占位图替代。
- * 占位图后续可替换为 ArkUI 原生 Canvas + WebSocket 自绘 K 线。
+ * OHOS 实现：使用 KuiklyKLineChart 的 ohosArm64 KMP 层和 ArkTS 原生 Host。
  */
 actual fun ViewContainer<*, *>.PlatformKLineChart(
     flexValue: Float,
@@ -18,10 +18,16 @@ actual fun ViewContainer<*, *>.PlatformKLineChart(
     configJson: String,
     onError: (code: String, message: String) -> Unit,
 ) {
-    // 鸿蒙暂无 K 线原生 View：直接用占位组件，并在控制台打印 OHOS 端不支持的提示。
-    ChartPlaceholder(
-        text = "K 线图（OHOS 端暂以占位呈现）\n$symbolCode · $symbolName",
-        loading = false,
-    )
-    onError("OhosUnsupported", "KLineChart native view is not available on OHOS, using placeholder")
+    KLineChart {
+        attr {
+            flex(flexValue)
+            symbol(symbolCode, symbolName)
+            period(periodValue, periodUnit)
+            mode(modeName)
+            theme(themeName)
+            bars(barsJson)
+            config(configJson)
+        }
+        event { onError(onError) }
+    }
 }

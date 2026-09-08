@@ -4,6 +4,7 @@ import {
   KRRenderViewExportCreator
 } from '@kuikly-open/render';
 import { KRBridgeModule } from './modules/KRBridgeModule';
+import { KRKLineChart } from '@kuiklybase/kuikly-kline-chart-ohos';
 
 /**
  * StockChat 鸿蒙端 View 委托：
@@ -13,7 +14,9 @@ import { KRBridgeModule } from './modules/KRBridgeModule';
  */
 export class KuiklyViewDelegate extends IKuiklyViewDelegate {
   getCustomRenderViewCreatorRegisterMap(): Map<string, KRRenderViewExportCreator> {
-    return new Map();
+    const map: Map<string, KRRenderViewExportCreator> = new Map();
+    map.set(KRKLineChart.VIEW_NAME, () => new KRKLineChart());
+    return map;
   }
 
   getCustomRenderViewCreatorRegisterMapV2(): Map<string, KRRenderViewExportCreator> {
