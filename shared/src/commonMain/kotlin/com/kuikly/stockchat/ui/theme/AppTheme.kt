@@ -13,7 +13,7 @@ import com.tencent.kuikly.core.base.Color
 object AppTheme {
 
     // 墨色（主要动作 / 标题）与链接蓝（少量使用）
-    val ink = Color(0xFF0F172AL)
+    val ink = Color(0xFF191919L)
     val inkSoft = Color(0xFFEEF0F4L)
     val primary = Color(0xFF0F172AL)
     val primaryDark = Color(0xFF020617L)
@@ -36,19 +36,20 @@ object AppTheme {
     val purpleSoft = Color(0xFFF3EEFDL)
 
     // 中性色（对齐 Kimi：整页近白，白控件靠轻阴影浮起，不要灰条分区）
-    val background = Color(0xFFFAFAFAL)
+    val background = Color.WHITE
+    val drawerBackground = Color(0xFFF5F5F5L)
     val surface = Color.WHITE
-    val surfaceMuted = Color(0xFFF2F3F5L)
+    val surfaceMuted = Color(0xFFF7F7F7L)
     val divider = Color(0xFFEBEDF0L)
     val border = Color(0xFFE8E8EAL)
-    val textPrimary = Color(0xFF0F172AL)
-    val textSecondary = Color(0xFF475569L)
-    val textTertiary = Color(0xFF94A3B8L)
+    val textPrimary = Color(0xFF191919L)
+    val textSecondary = Color(0xFF666666L)
+    val textTertiary = Color(0xFF999999L)
     val textOnPrimary = Color.WHITE
     val scrim = Color(0, 0, 0, 0.4f)
 
     // 聊天气泡：用户消息浅灰气泡；AI 回复不加底色，直接铺在页面上
-    val userBubble = Color(0xFFF1F3F6L)
+    val userBubble = Color(0xFFF5F5F5L)
     val aiBubble = Color.WHITE
 
     // 尺寸

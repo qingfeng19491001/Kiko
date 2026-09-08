@@ -46,5 +46,9 @@
         <key>NSAllowsLocalNetworking</key>
         <true/>
     </dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>StockChat 使用麦克风录入股票问题。</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>StockChat 将语音转换为股票问答文本。</string>
 </dict>
 </plist>

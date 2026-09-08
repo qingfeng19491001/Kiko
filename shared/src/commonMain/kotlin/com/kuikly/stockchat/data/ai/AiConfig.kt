@@ -12,8 +12,15 @@ object AiConfig {
     /** 百炼 OpenAI 兼容模式 Base URL */
     const val BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
+    /** 火山引擎双向流式语音服务。 */
+    const val VOLC_ASR_URL = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
+    const val VOLC_TTS_URL = "wss://openspeech.bytedance.com/api/v3/tts/bidirection"
+
     /** 百炼 API Key（来自本地 AiSecrets.kt，不入库） */
     val API_KEY: String get() = AiSecrets.API_KEY
+
+    /** 火山引擎语音 API Key（来自本地 AiSecrets.kt，不入库）。 */
+    val VOLC_API_KEY: String get() = AiSecrets.VOLC_API_KEY
 
     /** 默认模型 */
     const val MODEL = "qwen3.8-flash"

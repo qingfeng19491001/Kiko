@@ -35,6 +35,9 @@ class ChatViewModel(
     var inputText by observable("")
     var ttsEnabled by observable(false)
 
+    /** 由页面注入的原生播报回调，避免 ViewModel 依赖具体平台实现。 */
+    var onReplyCompleted: ((String) -> Unit)? = null
+
     /** 是否有消息（欢迎页 / 对话页切换） */
     var hasConversation by observable(false)
 
@@ -187,6 +190,10 @@ class ChatViewModel(
                 }
                 persistCurrent()
                 requestScrollToBottom()
+                answer.blocks.filterIsInstance<AnswerBlock.Markdown>()
+                    .joinToString("\n") { it.text }
+                    .takeIf { it.isNotBlank() }
+                    ?.let { onReplyCompleted?.invoke(it) }
             }
 
             override fun onError(message: String) {

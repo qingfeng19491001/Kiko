@@ -55,6 +55,8 @@ kotlin {
             implementation("com.tencent.kuiklybase:KuiklyMarkdown:$kuiklyMarkdownVersion")
             // K 线图 Android 原生渲染部分
             api("io.github.qingfeng19491001:kuiklyklinechartandroid:$kuiklyKLineVersion")
+            // 火山引擎流式语音服务的 Android WebSocket 客户端。
+            implementation("com.squareup.okhttp3:okhttp:4.12.0")
         }
         iosMain.dependencies {
             // AI 回复 Markdown 渲染（含流式增量渲染）— 仅 Android/iOS 使用

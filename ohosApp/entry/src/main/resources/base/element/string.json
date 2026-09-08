@@ -1,6 +1,10 @@
 {
   "string": [
     {
+      "name": "microphone_permission_reason",
+      "value": "用于录入股票语音问题"
+    },
+    {
       "name": "module_desc",
       "value": "module description"
     },

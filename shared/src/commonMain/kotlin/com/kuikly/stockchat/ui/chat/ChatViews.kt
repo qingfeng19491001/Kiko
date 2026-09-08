@@ -1,6 +1,7 @@
 package com.kuikly.stockchat.ui.chat
 
 import com.kuikly.stockchat.domain.chat.MessageStatus
+import com.kuikly.stockchat.domain.chat.Intent
 import com.kuikly.stockchat.domain.model.MarketSnapshot
 import com.kuikly.stockchat.domain.util.NumberFormat
 import com.kuikly.stockchat.ui.components.AnswerBlockView
@@ -14,13 +15,16 @@ import com.kuikly.stockchat.ui.components.Spacer
 import com.kuikly.stockchat.ui.components.StreamingMarkdownView
 import com.kuikly.stockchat.ui.components.charts.SparklineChart
 import com.kuikly.stockchat.ui.theme.AppTheme
+import com.tencent.kuikly.core.base.Animation
 import com.tencent.kuikly.core.base.Border
 import com.tencent.kuikly.core.base.BorderStyle
 import com.tencent.kuikly.core.base.BoxShadow
 import com.tencent.kuikly.core.base.Color
+import com.tencent.kuikly.core.base.Translate
 import com.tencent.kuikly.core.base.ViewContainer
 import com.tencent.kuikly.core.base.ViewRef
 import com.tencent.kuikly.core.base.attr.ImageUri
+import com.tencent.kuikly.core.base.event.LongPressParams
 import com.tencent.kuikly.core.directives.velse
 import com.tencent.kuikly.core.directives.vfor
 import com.tencent.kuikly.core.directives.vif
@@ -74,7 +78,7 @@ fun ViewContainer<*, *>.ChatNavBar(
                 onClick = onMenu,
             )
             View {
-                attr { flex(1f); flexDirectionRow(); alignItemsCenter(); justifyContentCenter() }
+                attr { flex(1f); flexDirectionRow(); alignItemsCenter(); paddingLeft(12f) }
                 Text {
                     attr {
                         text("StockChat")
@@ -104,104 +108,86 @@ fun ViewContainer<*, *>.ChatNavBar(
 fun ViewContainer<*, *>.WelcomeView(
     vm: ChatViewModel,
     pageWidth: Float,
+    compact: () -> Boolean,
     onPrompt: (String) -> Unit,
     onOpenInstrument: (String) -> Unit,
 ) {
     View {
-        attr {
-            paddingLeft(AppTheme.pageHorizontalPadding)
-            paddingRight(AppTheme.pageHorizontalPadding)
-            flex(1f)
-        }
-
-        // 机器人头像
+        attr { flex(1f); paddingLeft(16f); paddingRight(16f) }
         View {
-            attr { allCenter(); marginTop(18f) }
+            attr { flex(1f); allCenter() }
+            Image {
+                attr {
+                    val isCompact = compact()
+                    size(58f, 58f)
+                    borderRadius(29f)
+                    src(ImageUri.commonAssets("robot.png"))
+                    // 页面被键盘压缩时整体仍向上移动；这段反向补偿把净位移控制在 Kimi 的约 30dp。
+                    transform(Translate(0f, 0f, 0f, if (isCompact) 30f else 0f))
+                    animation(Animation.easeOut(0.28f), isCompact)
+                }
+            }
             View {
                 attr {
-                    size(112f, 112f)
-                    borderRadius(56f)
-                    allCenter()
-                    backgroundColor(AppTheme.accentSoft)
+                    val isCompact = compact()
+                    height(if (isCompact) 0f else 150f)
+                    alignItemsCenter()
+                    overflow(true)
+                    animation(Animation.easeOut(0.28f), isCompact)
                 }
-                Image {
+                View {
                     attr {
-                        size(112f, 112f)
-                        borderRadius(56f)
-                        src(ImageUri.commonAssets("robot.png"))
+                        val isCompact = compact()
+                        alignItemsCenter()
+                        opacity(if (isCompact) 0f else 1f)
+                        transform(Translate(0f, 0f, 0f, if (isCompact) 16f else 0f))
+                        animation(Animation.easeOut(0.2f), isCompact)
+                    }
+                    Text {
+                        attr {
+                            text("你好，今天想了解\n哪只股票的行情？")
+                            fontSize(20f); lineHeight(30f); textAlignCenter()
+                            color(AppTheme.textPrimary); marginTop(26f)
+                        }
+                    }
+                    View {
+                        attr {
+                            marginTop(22f); borderRadius(20f); backgroundColor(AppTheme.surfaceMuted)
+                            paddingLeft(18f); paddingRight(18f); paddingTop(10f); paddingBottom(10f)
+                        }
+                        event { click { onPrompt("腾讯控股后市如何？") } }
+                        Text { attr { text("开始行情分析"); fontSize(14f); color(Color(0xFF398BB5L)) } }
                     }
                 }
             }
         }
-
-        // 标题
         View {
-            attr { alignItemsCenter(); marginTop(20f) }
-            Text {
-                attr {
-                    text("AI 股票助手")
-                    fontSize(26f)
-                    fontWeight700()
-                    color(AppTheme.textPrimary)
+            attr {
+                val isCompact = compact()
+                flexDirectionRow(); justifyContentSpaceBetween()
+                height(if (isCompact) 0f else 46f)
+                opacity(if (isCompact) 0f else 1f)
+                transform(Translate(0f, 0f, 0f, if (isCompact) 12f else 0f))
+                overflow(true)
+                animation(Animation.easeOut(0.22f), isCompact)
+            }
+            listOf(
+                Triple(IconKind.CHART, "行情分析", "腾讯控股后市如何？"),
+                Triple(IconKind.COMPARE, "对比", "比亚迪 vs 特斯拉 对比"),
+                Triple(IconKind.ALERT, "风险", "阿里巴巴有哪些风险"),
+            ).forEach { (icon, title, prompt) ->
+                View {
+                    attr {
+                        flexDirectionRow(); alignItemsCenter()
+                        backgroundColor(AppTheme.surfaceMuted); borderRadius(22f)
+                        paddingLeft(12f); paddingRight(12f); height(42f)
+                    }
+                    event { click { onPrompt(prompt) } }
+                    Icon(icon, 17f, AppTheme.textTertiary)
+                    Text { attr { text(title); fontSize(14f); color(AppTheme.textPrimary); marginLeft(6f) } }
                 }
             }
-            Text {
-                attr {
-                    text("帮你看懂行情、做分析、给建议")
-                    fontSize(14f)
-                    color(AppTheme.textSecondary)
-                    marginTop(8f)
-                }
-            }
         }
-
-        // 功能卡片 2x2 网格
-        Spacer(32f)
-        val cardGap = 12f
-        val cardWidth = (pageWidth - AppTheme.pageHorizontalPadding * 2 - cardGap) / 2
-        View {
-            attr { flexDirectionRow(); flexWrapWrap() }
-            FunctionCard(
-                width = cardWidth,
-                icon = IconKind.CHART,
-                iconBg = Color(0xFFEDF1FEL),
-                iconColor = AppTheme.accent,
-                title = "行情分析",
-                subtitle = "洞察市场走势",
-            ) { onPrompt("腾讯控股后市如何？") }
-            View { attr { width(cardGap) } }
-            FunctionCard(
-                width = cardWidth,
-                icon = IconKind.COMPARE,
-                iconBg = Color(0xFFE6F4EBL),
-                iconColor = Color(0xFF12924AL),
-                title = "对比行情",
-                subtitle = "多股对比分析",
-            ) { onPrompt("比亚迪 vs 特斯拉 对比") }
-        }
-        View { attr { height(cardGap) } }
-        View {
-            attr { flexDirectionRow(); flexWrapWrap() }
-            FunctionCard(
-                width = cardWidth,
-                icon = IconKind.TREND_UP,
-                iconBg = Color(0xFFEEF6FFL),
-                iconColor = Color(0xFF2563EBL),
-                title = "趋势判断",
-                subtitle = "把握趋势机会",
-            ) { onPrompt("恒生指数短期走势判断") }
-            View { attr { width(cardGap) } }
-            FunctionCard(
-                width = cardWidth,
-                icon = IconKind.ALERT,
-                iconBg = Color(0xFFFFF1EBL),
-                iconColor = Color(0xFFEA580CL),
-                title = "风险提醒",
-                subtitle = "识别风险信号",
-            ) { onPrompt("阿里巴巴有哪些风险") }
-        }
-
-        Spacer(24f)
     }
 }
 
@@ -438,7 +424,7 @@ fun ViewContainer<*, *>.AssistantMessageView(
                 }
             }
             vif({ message.status == MessageStatus.THINKING }) {
-                Text { attr { text("· 正在检索行情"); fontSize(12f); color(AppTheme.textTertiary); marginLeft(4f) } }
+                Text { attr { text("· 正在分析"); fontSize(12f); color(AppTheme.textTertiary); marginLeft(4f) } }
             }
             vif({ message.status == MessageStatus.STREAMING }) {
                 Text { attr { text("· 生成中"); fontSize(12f); color(AppTheme.textTertiary); marginLeft(4f) } }
@@ -451,7 +437,7 @@ fun ViewContainer<*, *>.AssistantMessageView(
                 ActivityIndicator { attr { isGrayStyle(true) } }
                 Text {
                     attr {
-                        text("正在拉取实时行情并计算技术指标…")
+                        text(thinkingText(message.intent))
                         fontSize(13f)
                         color(AppTheme.textSecondary)
                         marginLeft(8f)
@@ -508,18 +494,33 @@ fun ViewContainer<*, *>.AssistantMessageView(
     }
 }
 
+private fun thinkingText(intent: Intent): String = when (intent) {
+    Intent.STOCK_ANALYSIS -> "正在读取行情并计算技术指标…"
+    Intent.TREND -> "正在计算均线、动能与支撑压力…"
+    Intent.RISK -> "正在检查波动、估值与行业风险…"
+    Intent.COMPARE -> "正在对齐两只标的的行情指标…"
+    Intent.MARKET_OVERVIEW -> "正在汇总主要指数与市场表现…"
+    Intent.KNOWLEDGE -> "正在整理相关投资知识…"
+    Intent.GREETING -> "正在准备可提问的股票场景…"
+    Intent.UNKNOWN -> "正在理解问题并匹配分析场景…"
+}
+
 // endregion
 
 // region 输入框
 
 fun ViewContainer<*, *>.ComposerView(
     vm: ChatViewModel,
+    expanded: () -> Boolean,
+    voiceMode: () -> Boolean,
     onSend: (String) -> Unit,
     onStop: () -> Unit,
     onKeyboardHeight: (Float) -> Unit,
+    onFocusChange: (Boolean) -> Unit,
     onInputRef: (ViewRef<InputView>) -> Unit,
     onAttachClick: () -> Unit,
     onVoiceClick: () -> Unit,
+    onVoiceLongPress: (LongPressParams) -> Unit,
 ) {
     View {
         attr { backgroundColor(Color(0xFFFFFFFFL)) }
@@ -527,30 +528,31 @@ fun ViewContainer<*, *>.ComposerView(
             attr {
                 flexDirectionRow()
                 alignItemsCenter()
-                paddingLeft(16f); paddingRight(16f); paddingTop(10f)
+                val isExpanded = expanded()
+                paddingLeft(8f); paddingRight(8f); paddingTop(8f)
+                paddingBottom(if (isExpanded) 8f else 0f)
+                animation(Animation.easeOut(0.24f), isExpanded)
             }
-            // Kimi 式大胶囊：+ / 输入 / 语音·发送 收进同一颗 pill
+            // 聚焦时由单行胶囊展开为上下两层，输入节点本身保持不变，避免丢失焦点。
             View {
                 attr {
+                    val isExpanded = expanded()
                     flex(1f)
-                    minHeight(56f)
-                    borderRadius(28f)
+                    height(if (isExpanded) 82f else 56f)
+                    borderRadius(if (isExpanded) 22f else 28f)
                     backgroundColor(Color.WHITE)
-                    boxShadow(BoxShadow(0f, 2f, 8f, Color(0x0F000000L)))
-                    border(Border(0.5f, BorderStyle.SOLID, Color(0x0F000000L)))
-                    flexDirectionRow()
-                    alignItemsCenter()
-                    paddingLeft(8f)
-                    paddingRight(8f)
-                    paddingTop(6f)
-                    paddingBottom(6f)
+                    boxShadow(BoxShadow(0f, 4f, 18f, Color(0x10000000L)))
+                    animation(Animation.easeOut(0.24f), isExpanded)
                 }
                 View {
                     attr {
+                        val isExpanded = expanded()
+                        absolutePosition(left = 8f, top = if (isExpanded) 40f else 10f)
                         size(36f, 36f)
                         borderRadius(18f)
                         allCenter()
                         backgroundColor(AppTheme.surfaceMuted)
+                        animation(Animation.easeOut(0.24f), isExpanded)
                     }
                     event { click { onAttachClick() } }
                     Icon(IconKind.PLUS, 18f, AppTheme.textSecondary, 1.8f)
@@ -558,60 +560,102 @@ fun ViewContainer<*, *>.ComposerView(
                 Input {
                     ref { onInputRef(it) }
                     attr {
-                        flex(1f)
-                        minHeight(24f)
-                        maxHeight(96f)
+                        val isExpanded = expanded()
+                        absolutePosition(
+                            left = if (isExpanded) 12f else 52f,
+                            top = if (isExpanded) 10f else 16f,
+                            right = if (isExpanded) 12f else 52f,
+                        )
+                        height(28f)
+                        opacity(if (voiceMode()) 0f else 1f)
+                        touchEnable(!voiceMode())
                         fontSize(16f)
                         color(AppTheme.textPrimary)
                         placeholder("输入股票名称、代码或问题")
                         placeholderColor(AppTheme.textTertiary)
                         returnKeyTypeSend()
                         maxTextLength(200)
-                        marginLeft(8f)
-                        marginRight(8f)
+                        animation(Animation.easeOut(0.24f), isExpanded)
                     }
                     event {
                         textDidChange { vm.inputText = it.text }
                         inputReturn { onSend(it.text) }
+                        inputFocus { onFocusChange(true) }
+                        inputBlur { onFocusChange(false) }
                         keyboardHeightChange { onKeyboardHeight(it.height) }
                     }
                 }
                 View {
                     attr {
+                        absolutePosition(left = 52f, top = 0f, right = 52f, bottom = 0f)
+                        allCenter()
+                        opacity(if (voiceMode()) 1f else 0f)
+                        touchEnable(voiceMode())
+                    }
+                    event {
+                        click { }
+                        longPress { onVoiceLongPress(it) }
+                    }
+                    Text {
+                        attr {
+                            text("按住说话")
+                            fontSize(15f)
+                            fontWeight600()
+                            color(AppTheme.textPrimary)
+                        }
+                    }
+                }
+                View {
+                    attr {
+                        val isExpanded = expanded()
+                        absolutePosition(right = 8f, top = if (isExpanded) 40f else 10f)
                         size(36f, 36f)
                         borderRadius(18f)
                         allCenter()
                         backgroundColor(
                             when {
+                                voiceMode() -> AppTheme.surfaceMuted
                                 vm.isGenerating -> AppTheme.ink
                                 vm.inputText.isNotBlank() -> AppTheme.ink
                                 else -> Color.TRANSPARENT
                             },
                         )
+                        animation(Animation.easeOut(0.24f), isExpanded)
                     }
                     event {
                         click {
                             when {
+                                voiceMode() -> onVoiceClick()
                                 vm.isGenerating -> onStop()
                                 vm.inputText.isNotBlank() -> onSend(vm.inputText)
                                 else -> onVoiceClick()
                             }
                         }
                     }
-                    vif({ vm.isGenerating }) { Icon(IconKind.STOP, 14f, Color.WHITE) }
+                    vif({ voiceMode() }) { Icon(IconKind.KEYBOARD, 18f, AppTheme.textSecondary) }
                     velse {
-                        vif({ vm.inputText.isNotBlank() }) {
-                            Icon(IconKind.ARROW_UP, 18f, Color.WHITE, 2.4f)
-                        }
+                        vif({ vm.isGenerating }) { Icon(IconKind.STOP, 14f, Color.WHITE) }
                         velse {
-                            Icon(IconKind.VOICE, 20f, AppTheme.textSecondary, 1.8f)
+                            vif({ vm.inputText.isNotBlank() }) {
+                                Icon(IconKind.ARROW_UP, 18f, Color.WHITE, 2.4f)
+                            }
+                            velse {
+                                Icon(IconKind.VOICE, 20f, AppTheme.textSecondary, 1.8f)
+                            }
                         }
                     }
                 }
             }
         }
         View {
-            attr { alignItemsCenter(); paddingTop(4f); paddingBottom(8f) }
+            attr {
+                val isExpanded = expanded()
+                height(if (isExpanded) 0f else 24f)
+                opacity(if (isExpanded) 0f else 1f)
+                transform(Translate(0f, 0f, 0f, if (isExpanded) 8f else 0f))
+                allCenter(); overflow(true)
+                animation(Animation.easeOut(0.2f), isExpanded)
+            }
             Text {
                 attr {
                     text("行情数据来自腾讯证券，AI 内容仅供参考，不构成投资建议")
@@ -620,6 +664,158 @@ fun ViewContainer<*, *>.ComposerView(
                 }
             }
         }
+    }
+}
+
+/** Kimi 式长按录音浮层：底部面板升起，波形持续变化，松手后发送。 */
+fun ViewContainer<*, *>.VoiceRecordingOverlay(
+    visible: () -> Boolean,
+    phase: () -> Int,
+    cancelArmed: () -> Boolean,
+    bottomInset: Float,
+) {
+    View {
+        attr {
+            val isVisible = visible()
+            absolutePosition(left = 0f, right = 0f, bottom = 0f)
+            height(500f + bottomInset)
+            paddingBottom(bottomInset)
+            backgroundColor(Color.WHITE)
+            borderRadius(26f)
+            boxShadow(BoxShadow(0f, -8f, 30f, Color(0x14000000L)))
+            opacity(if (isVisible) 1f else 0f)
+            transform(Translate(0f, 0f, 0f, if (isVisible) 0f else 540f))
+            animation(Animation.easeOut(0.24f), isVisible)
+            touchEnable(false)
+            zIndex(20, useOutline = false)
+        }
+        View {
+            attr { alignItemsCenter(); paddingTop(72f) }
+            VoiceWave(phase, cancelArmed)
+            Text {
+                attr {
+                    text(if (cancelArmed()) "松开取消" else "松开发送")
+                    fontSize(12f)
+                    color(if (cancelArmed()) AppTheme.down else AppTheme.textTertiary)
+                    marginTop(12f)
+                }
+            }
+        }
+        View { attr { flex(1f) } }
+        View {
+            attr {
+                flexDirectionRow(); justifyContentSpaceBetween(); alignItemsCenter()
+                paddingLeft(42f); paddingRight(42f); marginBottom(24f)
+            }
+            Icon(IconKind.CLOSE, 18f, AppTheme.textTertiary)
+            Icon(IconKind.EDIT, 18f, AppTheme.textTertiary)
+        }
+        View {
+            attr {
+                height(58f)
+                marginLeft(8f); marginRight(8f); marginBottom(8f)
+                borderRadius(29f)
+                allCenter()
+                backgroundColor(Color.WHITE)
+                boxShadow(BoxShadow(0f, 3f, 18f, Color(0x16000000L)))
+            }
+            View {
+                attr { flexDirectionRow(); alignItemsCenter() }
+                Text {
+                    attr {
+                        text(if (cancelArmed()) "松开取消" else "松开发送")
+                        fontSize(14f); fontWeight600()
+                        color(if (cancelArmed()) AppTheme.down else Color(0xFF4D9FEFL))
+                    }
+                }
+                View {
+                    attr { flexDirectionRow(); alignItemsCenter(); marginLeft(5f); height(16f) }
+                    repeat(4) { index ->
+                        View {
+                            attr {
+                                width(2f); height(if ((phase() + index) % 3 == 0) 12f else 7f)
+                                borderRadius(1f); marginRight(2f)
+                                backgroundColor(if (cancelArmed()) AppTheme.down else Color(0xFF4D9FEFL))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun ViewContainer<*, *>.VoiceWave(phase: () -> Int, cancelArmed: () -> Boolean) {
+    val levels = listOf(3f, 6f, 10f, 14f, 8f, 5f, 12f, 16f, 9f, 5f, 13f, 8f)
+    View {
+        attr { flexDirectionRow(); alignItemsCenter(); height(22f) }
+        repeat(20) { index ->
+            View {
+                attr {
+                    val p = phase()
+                    width(2f)
+                    height(levels[(index + p) % levels.size])
+                    borderRadius(1f)
+                    marginRight(2f)
+                    backgroundColor(if (cancelArmed()) AppTheme.down else Color(0xFF4D9FEFL))
+                    animation(Animation.easeInOut(0.1f), p)
+                }
+            }
+        }
+    }
+}
+
+/** 输入框上方的附件操作面板，保持轻量但具备完整的打开、选择、关闭闭环。 */
+fun ViewContainer<*, *>.AttachmentPanel(
+    visible: () -> Boolean,
+    onPickImage: () -> Unit,
+    onPickFile: () -> Unit,
+    onPickStock: () -> Unit,
+) {
+    View {
+        attr {
+            val isVisible = visible()
+            height(if (isVisible) 82f else 0f)
+            opacity(if (isVisible) 1f else 0f)
+            overflow(true)
+            animation(Animation.easeOut(0.2f), isVisible)
+            paddingLeft(16f); paddingRight(16f); paddingBottom(8f)
+        }
+        View {
+            attr {
+                flexDirectionRow()
+                alignItemsCenter()
+                justifyContentSpaceBetween()
+                backgroundColor(Color.WHITE)
+                borderRadius(16f)
+                paddingLeft(12f); paddingRight(12f); paddingTop(10f); paddingBottom(10f)
+                boxShadow(BoxShadow(0f, 2f, 12f, Color(0x12000000L)))
+            }
+            AttachmentAction(IconKind.CHART, "股票", onPickStock)
+            AttachmentAction(IconKind.BOOK, "文件", onPickFile)
+            AttachmentAction(IconKind.CANDLE, "图片", onPickImage)
+        }
+    }
+}
+
+private fun ViewContainer<*, *>.AttachmentAction(icon: IconKind, title: String, onClick: () -> Unit) {
+    View {
+        attr {
+            flex(1f)
+            alignItemsCenter()
+            paddingTop(2f); paddingBottom(2f)
+        }
+        event { click { onClick() } }
+        View {
+            attr {
+                size(34f, 34f)
+                borderRadius(17f)
+                allCenter()
+                backgroundColor(AppTheme.surfaceMuted)
+            }
+            Icon(icon, 17f, AppTheme.textSecondary)
+        }
+        Text { attr { text(title); fontSize(11f); color(AppTheme.textSecondary); marginTop(4f) } }
     }
 }
 

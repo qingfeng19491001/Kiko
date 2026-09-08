@@ -5,7 +5,8 @@ import com.kuikly.stockchat.ui.components.Icon
 import com.kuikly.stockchat.ui.components.IconButton
 import com.kuikly.stockchat.ui.components.IconKind
 import com.kuikly.stockchat.ui.theme.AppTheme
-import com.tencent.kuikly.core.base.Animation
+import com.tencent.kuikly.core.base.attr.CaptureRule
+import com.tencent.kuikly.core.base.attr.CaptureRuleDirection
 import com.tencent.kuikly.core.base.Color
 import com.tencent.kuikly.core.base.ViewContainer
 import com.tencent.kuikly.core.base.event.Event
@@ -20,40 +21,38 @@ import com.tencent.kuikly.core.views.List
 import com.tencent.kuikly.core.views.Text
 import com.tencent.kuikly.core.views.View
 
-/** 抽屉宽度：屏幕 82%，最大 320。 */
-internal fun chatDrawerWidth(pageWidth: Float): Float = (pageWidth * 0.82f).coerceAtMost(320f)
+/** 实机参考：展开时露出约 15% 的主页。 */
+internal fun chatDrawerWidth(pageWidth: Float): Float = pageWidth * 0.85f
 
 /**
  * 抽屉进度。0=关闭 1=打开。
- * 拖拽中直接改 progress（跟手、无动画）；松手后再改 progress，由 attr 里的 easeOut 收尾。
+ * progress 始终是实际显示进度；拖拽和 Bezier 收尾共享它。
  */
 internal class DrawerState {
     var progress by observable(0f)
     var dragging by observable(false)
+    var settling by observable(false)
 }
 
 /**
- * Kimi 风格覆盖式抽屉参数。
- * 抽屉从左侧滑入覆盖主内容，主内容静止不动。
+ * 浮动主页式抽屉参数。
+ * 抽屉进度同时驱动抽屉、主页形变和遮罩，拖拽时完全跟手。
  *
- * 动画 API：`docs/DevGuide/animation-basic.md` easeOut
+ * 动画曲线由 DrawerPhysics.ease 统一计算。
  * 手势 API：`docs/API/components/basic-attr-event.md` pan
  */
 internal object DrawerMotion {
-    const val EDGE_ZONE_WIDTH = 32f
-    const val SNAP_THRESHOLD = 0.35f
-    const val SCRIM_ALPHA = 0.45f
+    const val SNAP_THRESHOLD = 0.5f
+    const val SCRIM_ALPHA = 0.62f
     const val FLING_VELOCITY = 680f
-    const val COMPOSER_BLOCK_HEIGHT = 92f
-    val DRAWER_BG = Color.WHITE
+    const val HOME_MIN_SCALE = 0.96f
+    const val HOME_MAX_RADIUS = 32f
+    val DRAWER_BG = AppTheme.drawerBackground
 
     /** 抽屉左偏移：关闭=-drawerWidth（屏外），打开=0。 */
     fun drawerShift(progress: Float, drawerWidth: Float): Float = (progress - 1f) * drawerWidth
     fun travelDistance(drawerWidth: Float): Float = drawerWidth.coerceAtLeast(1f)
 
-    fun openAnim(): Animation = Animation.easeOut(0.28f)
-    fun closeAnim(): Animation = Animation.easeOut(0.22f)
-    fun settleAnim(progress: Float): Animation = if (progress >= 0.5f) openAnim() else closeAnim()
 }
 
 internal fun Event.followPan(handler: (PanGestureParams) -> Unit) {
@@ -72,11 +71,12 @@ internal fun ViewContainer<*, *>.HistoryDrawerContent(
     onDelete: (id: String) -> Unit,
     onNewChat: () -> Unit,
     onClearAll: () -> Unit,
+    onPan: (PanGestureParams) -> Unit,
 ) {
     View {
         attr {
             flex(1f)
-            paddingTop(statusBarHeight)
+            paddingTop(statusBarHeight + 24f)
             backgroundColor(DrawerMotion.DRAWER_BG)
         }
         View {
@@ -89,10 +89,10 @@ internal fun ViewContainer<*, *>.HistoryDrawerContent(
                 attr {
                     size(40f, 40f)
                     borderRadius(20f)
-                    backgroundColor(AppTheme.ink)
+                    backgroundColor(Color(0xFFEEEEEEL))
                     allCenter()
                 }
-                Icon(IconKind.CANDLE, 22f, Color.WHITE, 1.6f)
+                Icon(IconKind.CANDLE, 22f, AppTheme.textSecondary, 1.6f)
             }
             View {
                 attr { flex(1f); marginLeft(12f); justifyContentCenter() }
@@ -149,9 +149,14 @@ internal fun ViewContainer<*, *>.HistoryDrawerContent(
             View {
                 attr { flex(1f) }
                 List {
-                    attr { flex(1f); paddingBottom(8f) }
+                    attr {
+                        flex(1f)
+                        paddingBottom(8f)
+                    }
                     vfor({ vm.conversations }) { conversation ->
                         View {
+                            attr { capture(CaptureRule.pan(CaptureRuleDirection.HORIZONTAL)) }
+                            event { followPan(onPan) }
                             if (isSectionStart(vm.conversations, conversation)) {
                                 SectionTitle(bucketOf(conversation.updatedAt))
                             }

@@ -9,11 +9,15 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.kuikly.stockchat.android.adapter.KRImageAdapter
 import com.kuikly.stockchat.android.adapter.KRLogAdapter
 import com.kuikly.stockchat.android.adapter.KRRouterAdapter
 import com.kuikly.stockchat.android.adapter.KRThreadAdapter
 import com.kuikly.stockchat.android.adapter.KRUncaughtExceptionHandlerAdapter
+import com.kuikly.stockchat.data.ai.AndroidPlatformContext
 import com.tencent.kuikly.core.render.android.IKuiklyRenderExport
 import com.tencent.kuikly.core.render.android.adapter.KuiklyRenderAdapterManager
 import com.tencent.kuikly.core.render.android.css.ktx.toMap
@@ -30,6 +34,7 @@ class KuiklyRenderActivity : AppCompatActivity(), KuiklyRenderViewBaseDelegatorD
 
     private lateinit var containerView: ViewGroup
     private val renderViewDelegator = KuiklyRenderViewBaseDelegator(this)
+    private var backStartedWithIme = false
 
     private val pageName: String
         get() = intent.getStringExtra(KEY_PAGE_NAME)?.takeIf { it.isNotEmpty() } ?: DEFAULT_PAGE
@@ -44,6 +49,7 @@ class KuiklyRenderActivity : AppCompatActivity(), KuiklyRenderViewBaseDelegatorD
 
     override fun onResume() {
         super.onResume()
+        AndroidPlatformContext.bind(this)
         renderViewDelegator.onResume()
     }
 
@@ -58,8 +64,19 @@ class KuiklyRenderActivity : AppCompatActivity(), KuiklyRenderViewBaseDelegatorD
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
-            if (renderViewDelegator.onBackPressed()) {
+        if (event.keyCode == KeyEvent.KEYCODE_BACK) {
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                backStartedWithIme = ViewCompat.getRootWindowInsets(containerView)
+                    ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+                if (backStartedWithIme) return true
+            }
+            if (event.action == KeyEvent.ACTION_UP && backStartedWithIme) {
+                WindowInsetsControllerCompat(window, containerView)
+                    .hide(WindowInsetsCompat.Type.ime())
+                backStartedWithIme = false
+                return true
+            }
+            if (event.action == KeyEvent.ACTION_UP && renderViewDelegator.onBackPressed()) {
                 return true
             }
         }

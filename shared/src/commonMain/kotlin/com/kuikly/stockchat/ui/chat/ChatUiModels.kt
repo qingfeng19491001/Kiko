@@ -27,9 +27,10 @@ class ChatUiMessage(
     val text: String,
     val createdAt: Long,
     initialStatus: MessageStatus,
-    var intent: Intent = Intent.UNKNOWN,
+    initialIntent: Intent = Intent.UNKNOWN,
 ) {
     var status by observable(initialStatus)
+    var intent by observable(initialIntent)
     var errorMessage by observable("")
     var blocks by observableList<UiBlock>()
 

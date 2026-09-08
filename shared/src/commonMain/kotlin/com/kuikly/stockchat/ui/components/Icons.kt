@@ -14,7 +14,7 @@ import kotlin.math.sin
 enum class IconKind {
     MENU, PLUS, SEND, ARROW_UP, BACK, CLOSE, CHEVRON_RIGHT, CHEVRON_DOWN,
     STAR, STAR_FILLED, SHARE, CLOCK, TRASH, SPARKLE, REFRESH, TREND_UP, ALERT, CHART, COMPARE, BOOK,
-    STOP, WIFI_OFF, MESSAGE, CANDLE, SEARCH, VOICE, SPEAKER, SPEAKER_OFF,
+    STOP, WIFI_OFF, MESSAGE, CANDLE, SEARCH, VOICE, KEYBOARD, EDIT, SPEAKER, SPEAKER_OFF,
 }
 
 fun ViewContainer<*, *>.Icon(
@@ -204,6 +204,22 @@ object IconPainter {
                 line(ctx, 11 * u, 5 * u, 11 * u, 19 * u)
                 line(ctx, 14 * u, 7.5f * u, 14 * u, 16.5f * u)
                 line(ctx, 17 * u, 10 * u, 17 * u, 14 * u)
+            }
+            IconKind.KEYBOARD -> {
+                rect(ctx, 3.5f * u, 5.5f * u, 17f * u, 13f * u)
+                for (row in 0 until 2) {
+                    for (column in 0 until 5) {
+                        circle(ctx, (6f + column * 3f) * u, (9f + row * 3f) * u, 0.55f * u, fill = true)
+                    }
+                }
+                line(ctx, 7f * u, 15.5f * u, 17f * u, 15.5f * u)
+            }
+            IconKind.EDIT -> {
+                path(ctx) {
+                    moveTo(5f * u, 18.5f * u); lineTo(7f * u, 13f * u); lineTo(16.5f * u, 3.5f * u)
+                    lineTo(20.5f * u, 7.5f * u); lineTo(11f * u, 17f * u); closePath()
+                }
+                line(ctx, 5f * u, 18.5f * u, 10.5f * u, 17f * u)
             }
             IconKind.SPEAKER, IconKind.SPEAKER_OFF -> {
                 ctx.beginPath()
