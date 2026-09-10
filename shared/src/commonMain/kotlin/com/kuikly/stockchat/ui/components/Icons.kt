@@ -15,6 +15,7 @@ enum class IconKind {
     MENU, PLUS, SEND, ARROW_UP, BACK, CLOSE, CHEVRON_RIGHT, CHEVRON_DOWN,
     STAR, STAR_FILLED, SHARE, CLOCK, TRASH, SPARKLE, REFRESH, TREND_UP, ALERT, CHART, COMPARE, BOOK,
     STOP, WIFI_OFF, MESSAGE, CANDLE, SEARCH, VOICE, KEYBOARD, EDIT, SPEAKER, SPEAKER_OFF,
+    CAMERA, IMAGE, FOLDER, SETTINGS, LAYERS, MESSAGE_PLUS,
 }
 
 fun ViewContainer<*, *>.Icon(
@@ -191,11 +192,41 @@ object IconPainter {
                 circle(ctx, 12 * u, 18 * u, 1.3f * u, fill = true)
                 line(ctx, 4 * u, 4 * u, 20 * u, 20 * u)
             }
-            IconKind.MESSAGE -> {
+            IconKind.MESSAGE, IconKind.MESSAGE_PLUS -> {
                 path(ctx) {
                     moveTo(4.5f * u, 5.5f * u); lineTo(19.5f * u, 5.5f * u); lineTo(19.5f * u, 15.5f * u); lineTo(10 * u, 15.5f * u)
                     lineTo(6 * u, 19 * u); lineTo(6 * u, 15.5f * u); lineTo(4.5f * u, 15.5f * u); closePath()
                 }
+                if (kind == IconKind.MESSAGE_PLUS) {
+                    line(ctx, 12 * u, 8.2f * u, 12 * u, 12.8f * u)
+                    line(ctx, 9.7f * u, 10.5f * u, 14.3f * u, 10.5f * u)
+                }
+            }
+            IconKind.SETTINGS -> {
+                circle(ctx, 12 * u, 12 * u, 3.2f * u, fill = false)
+                circle(ctx, 12 * u, 12 * u, 7.2f * u, fill = false)
+                for (i in 0 until 6) {
+                    val angle = i * PI / 3
+                    val inner = 7.2f * u
+                    val outer = 10.2f * u
+                    val dx = cos(angle).toFloat()
+                    val dy = sin(angle).toFloat()
+                    line(ctx, 12 * u + inner * dx, 12 * u + inner * dy, 12 * u + outer * dx, 12 * u + outer * dy)
+                }
+            }
+            IconKind.LAYERS -> {
+                fun diamond(cy: Float, half: Float) {
+                    path(ctx) {
+                        moveTo(12 * u, cy - half)
+                        lineTo(18.5f * u, cy)
+                        lineTo(12 * u, cy + half)
+                        lineTo(5.5f * u, cy)
+                        closePath()
+                    }
+                }
+                diamond(8.2f * u, 3.4f * u)
+                diamond(12f * u, 3.4f * u)
+                diamond(15.8f * u, 3.4f * u)
             }
             IconKind.VOICE -> {
                 // 声波：5 根竖线，中间最高、两侧渐低（Kimi 语音输入图标）
@@ -242,6 +273,44 @@ object IconPainter {
                     line(ctx, 16 * u, 8 * u, 21.5f * u, 16.5f * u)
                     line(ctx, 21.5f * u, 8 * u, 16 * u, 16.5f * u)
                 }
+            }
+            IconKind.CAMERA -> {
+                // 相机：圆角矩形机身 + 顶部三角 + 圆形镜头 + 闪光灯小圆
+                path(ctx) {
+                    moveTo(4 * u, 8 * u); lineTo(7 * u, 8 * u); lineTo(8.5f * u, 5.5f * u)
+                    lineTo(15.5f * u, 5.5f * u); lineTo(17 * u, 8 * u); lineTo(20 * u, 8 * u)
+                    lineTo(20 * u, 18.5f * u); lineTo(4 * u, 18.5f * u); closePath()
+                }
+                circle(ctx, 12 * u, 12.5f * u, 3.8f * u, fill = false)
+                circle(ctx, 12 * u, 12.5f * u, 1.6f * u, fill = true)
+                circle(ctx, 16.8f * u, 7 * u, 0.9f * u, fill = true)
+            }
+            IconKind.IMAGE -> {
+                // 图片：矩形 + 山形 + 太阳
+                path(ctx) {
+                    moveTo(4 * u, 6 * u); lineTo(20 * u, 6 * u); lineTo(20 * u, 18.5f * u)
+                    lineTo(4 * u, 18.5f * u); closePath()
+                }
+                // 山脉折线
+                ctx.beginPath()
+                ctx.moveTo(4 * u, 15.5f * u)
+                ctx.lineTo(9 * u, 10.5f * u)
+                ctx.lineTo(13 * u, 14 * u)
+                ctx.lineTo(16.5f * u, 11f * u)
+                ctx.lineTo(20 * u, 15.5f * u)
+                ctx.stroke()
+                circle(ctx, 15.5f * u, 8.5f * u, 1.6f * u, fill = true)
+            }
+            IconKind.FOLDER -> {
+                // 文件夹上传：文件 + 向上箭头
+                path(ctx) {
+                    moveTo(3.5f * u, 7.5f * u); lineTo(3.5f * u, 18.5f * u)
+                    lineTo(20.5f * u, 18.5f * u); lineTo(20.5f * u, 8.5f * u)
+                    lineTo(11.5f * u, 8.5f * u); lineTo(10f * u, 7.5f * u); closePath()
+                }
+                // 向上箭头
+                line(ctx, 12 * u, 17 * u, 12 * u, 12.5f * u)
+                path(ctx) { moveTo(9 * u, 14.5f * u); lineTo(12 * u, 11.5f * u); lineTo(15 * u, 14.5f * u) }
             }
         }
     }

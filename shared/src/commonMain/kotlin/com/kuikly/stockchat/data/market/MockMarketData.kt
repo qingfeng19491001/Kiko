@@ -8,6 +8,7 @@ import com.kuikly.stockchat.domain.model.Market
 import com.kuikly.stockchat.domain.model.MarketSnapshot
 import com.kuikly.stockchat.domain.model.MinuteTick
 import com.kuikly.stockchat.domain.model.Quote
+import com.kuikly.stockchat.domain.util.DateUtil
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.max
@@ -84,7 +85,43 @@ object MockMarketData {
             KLinePeriod.DAY, KLinePeriod.MINUTE -> daily.takeLast(count)
             KLinePeriod.WEEK -> aggregate(daily, 5).takeLast(count)
             KLinePeriod.MONTH -> aggregate(daily, 21).takeLast(count)
+            KLinePeriod.QUARTER -> aggregate(daily, 63).takeLast(count)
+            KLinePeriod.YEAR -> aggregate(daily, 250).takeLast(count)
+            // 五日 = 5 分钟级别连续走势；分钟级周期按各自分钟跨度生成
+            KLinePeriod.FIVE_DAY -> minuteBars(instrument, 5, count)
+            KLinePeriod.MIN_1 -> minuteBars(instrument, 1, count)
+            KLinePeriod.MIN_5 -> minuteBars(instrument, 5, count)
+            KLinePeriod.MIN_15 -> minuteBars(instrument, 15, count)
+            KLinePeriod.MIN_30 -> minuteBars(instrument, 30, count)
+            KLinePeriod.MIN_60 -> minuteBars(instrument, 60, count)
+            KLinePeriod.MIN_120 -> minuteBars(instrument, 120, count)
         }
+    }
+
+    /** 分钟级演示数据：以最近日线收盘价为锚点，按分钟跨度生成连续随机游走 */
+    private fun minuteBars(instrument: Instrument, stepMinutes: Int, count: Int): List<KLineBar> {
+        val seed = seeds[instrument.key] ?: Seed(100.0, 20.0, 2.0, 1000.0, 1e7, 0.0)
+        val rnd = LcgRandom(instrument.key.hashCode().toLong() * 131 + stepMinutes)
+        val anchor = dailyBars(instrument, 320).last().close
+        val baseMs = DateUtil.parseToEpochMillis("2026-09-08 15:00") ?: 0L
+        val volPerBar = seed.dailyVolume / 240.0 * stepMinutes
+        var price = anchor * 0.985
+        val bars = ArrayList<KLineBar>(count)
+        for (i in 0 until count) {
+            val ts = baseMs - (count - 1 - i) * stepMinutes * 60_000L
+            val open = price
+            val close = max(price * (1 + rnd.gaussian() * 0.0012), price * 0.9)
+            val high = max(open, close) * (1 + abs(rnd.gaussian()) * 0.0008)
+            val low = min(open, close) * (1 - abs(rnd.gaussian()) * 0.0008)
+            val volume = volPerBar * (0.5 + abs(rnd.gaussian()))
+            bars += KLineBar(
+                DateUtil.formatEpochMinutes(ts),
+                round2(open), round2(close), round2(high), round2(low),
+                volume.roundToInt().toDouble(),
+            )
+            price = close
+        }
+        return bars
     }
 
     private fun aggregate(daily: List<KLineBar>, size: Int): List<KLineBar> =

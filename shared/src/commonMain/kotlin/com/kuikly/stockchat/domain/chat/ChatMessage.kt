@@ -1,5 +1,7 @@
 package com.kuikly.stockchat.domain.chat
 
+import com.kuikly.stockchat.domain.attachment.Attachment
+
 enum class Role { USER, ASSISTANT }
 
 enum class MessageStatus {
@@ -23,6 +25,7 @@ data class ChatMessage(
     val intent: Intent = Intent.UNKNOWN,
     val createdAt: Long,
     val errorMessage: String = "",
+    val attachments: List<Attachment> = emptyList(),
 ) {
     val isUser: Boolean get() = role == Role.USER
 }

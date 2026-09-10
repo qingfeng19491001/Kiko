@@ -2,6 +2,8 @@ package com.kuikly.stockchat.ui.chat
 
 import com.kuikly.stockchat.domain.chat.MessageStatus
 import com.kuikly.stockchat.domain.chat.Intent
+import com.kuikly.stockchat.domain.attachment.Attachment
+import com.kuikly.stockchat.domain.attachment.AttachmentKind
 import com.kuikly.stockchat.domain.model.MarketSnapshot
 import com.kuikly.stockchat.domain.util.NumberFormat
 import com.kuikly.stockchat.ui.components.AnswerBlockView
@@ -32,19 +34,21 @@ import com.tencent.kuikly.core.views.ActivityIndicator
 import com.tencent.kuikly.core.views.Image
 import com.tencent.kuikly.core.views.Input
 import com.tencent.kuikly.core.views.InputView
+import com.tencent.kuikly.core.views.Scroller
 import com.tencent.kuikly.core.views.Text
 import com.tencent.kuikly.core.views.View
+import kotlin.math.sin
 
-/** 首页推荐问题 */
-data class QuickPrompt(val category: String, val prompt: String)
-
-val quickPrompts: List<QuickPrompt> = listOf(
-    QuickPrompt("行情", "腾讯控股后市如何？"),
-    QuickPrompt("板块", "港股科技板块趋势分析"),
-    QuickPrompt("对比", "比亚迪 vs 特斯拉 对比"),
-    QuickPrompt("风险", "阿里巴巴有哪些风险"),
-    QuickPrompt("宏观", "美联储利率影响解读"),
-    QuickPrompt("知识", "什么是市盈率"),
+/** 首页推荐问题池，「换一换」按 3 条轮换 */
+val welcomePrompts: List<String> = listOf(
+    "腾讯控股后市如何？",
+    "今天大盘怎么样？",
+    "连板梯队",
+    "贵州茅台资金流向",
+    "比亚迪 vs 特斯拉 对比",
+    "阿里巴巴有哪些风险",
+    "恒生指数短期走势判断",
+    "什么是市盈率",
 )
 
 // region 导航栏
@@ -113,78 +117,138 @@ fun ViewContainer<*, *>.WelcomeView(
     onOpenInstrument: (String) -> Unit,
 ) {
     View {
-        attr { flex(1f); paddingLeft(16f); paddingRight(16f) }
+        attr { flex(1f); paddingLeft(20f); paddingRight(20f) }
+        // 上半部分：头像 + 大标题 + 建议卡片（小布式顶部布局）
         View {
-            attr { flex(1f); allCenter() }
+            attr {
+                val isCompact = compact()
+                flex(1f)
+                opacity(if (isCompact) 0f else 1f)
+                transform(Translate(0f, 0f, 0f, if (isCompact) 36f else 0f))
+                animation(Animation.easeOut(0.2f), isCompact)
+                overflow(true)
+            }
             Image {
                 attr {
-                    val isCompact = compact()
-                    size(58f, 58f)
-                    borderRadius(29f)
+                    size(72f, 72f)
+                    borderRadius(36f)
+                    marginTop(18f)
                     src(ImageUri.commonAssets("robot.png"))
-                    // 页面被键盘压缩时整体仍向上移动；这段反向补偿把净位移控制在 Kimi 的约 30dp。
-                    transform(Translate(0f, 0f, 0f, if (isCompact) 30f else 0f))
-                    animation(Animation.easeOut(0.28f), isCompact)
                 }
             }
-            View {
+            Text {
                 attr {
-                    val isCompact = compact()
-                    height(if (isCompact) 0f else 150f)
-                    alignItemsCenter()
-                    overflow(true)
-                    animation(Animation.easeOut(0.28f), isCompact)
+                    text("你好呀，我是小财")
+                    fontSize(24f)
+                    fontWeight700()
+                    color(AppTheme.textPrimary)
+                    marginTop(16f)
                 }
-                View {
-                    attr {
-                        val isCompact = compact()
-                        alignItemsCenter()
-                        opacity(if (isCompact) 0f else 1f)
-                        transform(Translate(0f, 0f, 0f, if (isCompact) 16f else 0f))
-                        animation(Animation.easeOut(0.2f), isCompact)
-                    }
-                    Text {
-                        attr {
-                            text("你好，今天想了解\n哪只股票的行情？")
-                            fontSize(20f); lineHeight(30f); textAlignCenter()
-                            color(AppTheme.textPrimary); marginTop(26f)
-                        }
-                    }
+            }
+            Text {
+                attr {
+                    text("行情、连板、资金动向，随时问我")
+                    fontSize(14f)
+                    color(AppTheme.textTertiary)
+                    marginTop(6f)
+                }
+            }
+            // 建议卡片列表（3 条，可换一批）
+            View {
+                attr { marginTop(22f) }
+                val offset = vm.welcomeOffset
+                (0 until 3).forEach { i ->
+                    val prompt = welcomePrompts[(offset + i) % welcomePrompts.size]
                     View {
                         attr {
-                            marginTop(22f); borderRadius(20f); backgroundColor(AppTheme.surfaceMuted)
-                            paddingLeft(18f); paddingRight(18f); paddingTop(10f); paddingBottom(10f)
+                            backgroundColor(Color.WHITE)
+                            borderRadius(14f)
+                            border(Border(1f, BorderStyle.SOLID, AppTheme.border))
+                            paddingLeft(16f); paddingRight(16f); paddingTop(14f); paddingBottom(14f)
+                            marginTop(if (i == 0) 0f else 10f)
                         }
-                        event { click { onPrompt("腾讯控股后市如何？") } }
-                        Text { attr { text("开始行情分析"); fontSize(14f); color(Color(0xFF398BB5L)) } }
+                        event { click { onPrompt(prompt) } }
+                        Text {
+                            attr {
+                                text(prompt)
+                                fontSize(15f)
+                                color(AppTheme.textPrimary)
+                            }
+                        }
+                    }
+                }
+            }
+            // 换一换
+            View {
+                attr {
+                    flexDirectionRow(); alignItemsCenter()
+                    marginTop(14f)
+                }
+                event { click { vm.welcomeOffset = (vm.welcomeOffset + 3) % welcomePrompts.size } }
+                Icon(IconKind.REFRESH, 14f, AppTheme.textTertiary)
+                Text {
+                    attr {
+                        text("换一换")
+                        fontSize(13f)
+                        color(AppTheme.textTertiary)
+                        marginLeft(6f)
                     }
                 }
             }
         }
+        // 底部提问胶囊：按内容宽度排布，超出时横向滑动，避免四等分挤压文字。
+        // 负边距抵消欢迎区 20 水平内边距，滚动时两端可露出下一颗胶囊。
         View {
             attr {
                 val isCompact = compact()
-                flexDirectionRow(); justifyContentSpaceBetween()
-                height(if (isCompact) 0f else 46f)
+                height(if (isCompact) 0f else 44f)
                 opacity(if (isCompact) 0f else 1f)
                 transform(Translate(0f, 0f, 0f, if (isCompact) 12f else 0f))
                 overflow(true)
+                marginLeft(-20f)
+                marginRight(-20f)
                 animation(Animation.easeOut(0.22f), isCompact)
             }
-            listOf(
-                Triple(IconKind.CHART, "行情分析", "腾讯控股后市如何？"),
-                Triple(IconKind.COMPARE, "对比", "比亚迪 vs 特斯拉 对比"),
-                Triple(IconKind.ALERT, "风险", "阿里巴巴有哪些风险"),
-            ).forEach { (icon, title, prompt) ->
-                View {
-                    attr {
-                        flexDirectionRow(); alignItemsCenter()
-                        backgroundColor(AppTheme.surfaceMuted); borderRadius(22f)
-                        paddingLeft(12f); paddingRight(12f); height(42f)
+            Scroller {
+                attr {
+                    flexDirectionRow()
+                    alignItemsCenter()
+                    height(44f)
+                    showScrollerIndicator(false)
+                    bouncesEnable(true)
+                }
+                val prompts = listOf(
+                    Triple(IconKind.CHART, "行情分析", "腾讯控股后市如何？"),
+                    Triple(IconKind.CANDLE, "帮我盯盘", "今天大盘怎么样？"),
+                    Triple(IconKind.TREND_UP, "连板梯队", "连板梯队"),
+                    Triple(IconKind.SPARKLE, "资金流向", "贵州茅台资金流向"),
+                )
+                prompts.forEachIndexed { index, (icon, title, prompt) ->
+                    View {
+                        attr {
+                            flexDirectionRow()
+                            alignItemsCenter()
+                            height(36f)
+                            paddingLeft(12f)
+                            paddingRight(14f)
+                            borderRadius(18f)
+                            backgroundColor(AppTheme.surfaceMuted)
+                            marginLeft(if (index == 0) 20f else 8f)
+                            marginRight(if (index == prompts.lastIndex) 20f else 0f)
+                        }
+                        event { click { onPrompt(prompt) } }
+                        Icon(icon, 15f, AppTheme.textSecondary, 1.8f)
+                        Text {
+                            attr {
+                                text(title)
+                                fontSize(13f)
+                                fontWeight500()
+                                color(AppTheme.textPrimary)
+                                marginLeft(6f)
+                                lines(1)
+                            }
+                        }
                     }
-                    event { click { onPrompt(prompt) } }
-                    Icon(icon, 17f, AppTheme.textTertiary)
-                    Text { attr { text(title); fontSize(14f); color(AppTheme.textPrimary); marginLeft(6f) } }
                 }
             }
         }
@@ -499,7 +563,9 @@ private fun thinkingText(intent: Intent): String = when (intent) {
     Intent.TREND -> "正在计算均线、动能与支撑压力…"
     Intent.RISK -> "正在检查波动、估值与行业风险…"
     Intent.COMPARE -> "正在对齐两只标的的行情指标…"
-    Intent.MARKET_OVERVIEW -> "正在汇总主要指数与市场表现…"
+    Intent.MARKET_OVERVIEW -> "正在汇总主要指数与市场广度…"
+    Intent.LIMIT_UP_LADDER -> "正在统计涨停池与连板梯队…"
+    Intent.CAPITAL_FLOW -> "正在读取主力资金流向…"
     Intent.KNOWLEDGE -> "正在整理相关投资知识…"
     Intent.GREETING -> "正在准备可提问的股票场景…"
     Intent.UNKNOWN -> "正在理解问题并匹配分析场景…"
@@ -512,6 +578,8 @@ private fun thinkingText(intent: Intent): String = when (intent) {
 fun ViewContainer<*, *>.ComposerView(
     vm: ChatViewModel,
     expanded: () -> Boolean,
+    keyboardVisible: () -> Boolean,
+    attachmentPanelVisible: () -> Boolean,
     voiceMode: () -> Boolean,
     onSend: (String) -> Unit,
     onStop: () -> Unit,
@@ -521,49 +589,74 @@ fun ViewContainer<*, *>.ComposerView(
     onAttachClick: () -> Unit,
     onVoiceClick: () -> Unit,
     onVoiceLongPress: (LongPressParams) -> Unit,
+    onPickCamera: () -> Unit,
+    onPickPhoto: () -> Unit,
+    onPickFile: () -> Unit,
+    onRemoveAttachment: (String) -> Unit,
 ) {
-    View {
-        attr { backgroundColor(Color(0xFFFFFFFFL)) }
+        View {
+            attr {
+                backgroundColor(Color(0xFFFFFFFFL))
+                flexDirectionColumn()
+                overflow(false)
+        }
         View {
             attr {
                 flexDirectionRow()
                 alignItemsCenter()
-                val isExpanded = expanded()
+                val isExpanded = expanded() && !attachmentPanelVisible()
                 paddingLeft(8f); paddingRight(8f); paddingTop(8f)
                 paddingBottom(if (isExpanded) 8f else 0f)
-                animation(Animation.easeOut(0.24f), isExpanded)
+                animation(Animation.easeOut(0.24f), if (attachmentPanelVisible()) false else isExpanded)
             }
             // 聚焦时由单行胶囊展开为上下两层，输入节点本身保持不变，避免丢失焦点。
             View {
                 attr {
-                    val isExpanded = expanded()
+                    val isExpanded = expanded() && !attachmentPanelVisible()
                     flex(1f)
-                    height(if (isExpanded) 82f else 56f)
+                    val hasAttachments = vm.pendingAttachments.isNotEmpty()
+                    // 展开或有附件时进入“编辑器”两层布局；收起态为单行胶囊。
+                    height(
+                        if (isExpanded) 82f + if (hasAttachments) 56f else 0f else 56f,
+                    )
                     borderRadius(if (isExpanded) 22f else 28f)
                     backgroundColor(Color.WHITE)
                     boxShadow(BoxShadow(0f, 4f, 18f, Color(0x10000000L)))
-                    animation(Animation.easeOut(0.24f), isExpanded)
+                    animation(Animation.easeOut(0.24f), if (attachmentPanelVisible()) false else isExpanded)
+                }
+                vif({ vm.pendingAttachments.isNotEmpty() }) {
+                    View {
+                        attr {
+                            absolutePosition(left = 10f, top = 8f, right = 10f)
+                            height(42f)
+                            flexDirectionRow()
+                            overflow(true)
+                        }
+                        vm.pendingAttachments.forEach { attachment ->
+                            PendingAttachmentCard(attachment) { onRemoveAttachment(attachment.id) }
+                        }
+                    }
                 }
                 View {
                     attr {
-                        val isExpanded = expanded()
-                        absolutePosition(left = 8f, top = if (isExpanded) 40f else 10f)
+                        val isExpanded = expanded() && !attachmentPanelVisible()
+                        absolutePosition(left = 8f, top = if (isExpanded) 40f + if (vm.pendingAttachments.isNotEmpty()) 56f else 0f else 10f)
                         size(36f, 36f)
                         borderRadius(18f)
                         allCenter()
                         backgroundColor(AppTheme.surfaceMuted)
-                        animation(Animation.easeOut(0.24f), isExpanded)
+                        animation(Animation.easeOut(0.24f), if (attachmentPanelVisible()) false else isExpanded)
                     }
                     event { click { onAttachClick() } }
-                    Icon(IconKind.PLUS, 18f, AppTheme.textSecondary, 1.8f)
+                    Icon(if (attachmentPanelVisible()) IconKind.CLOSE else IconKind.PLUS, 18f, AppTheme.textSecondary, 1.8f)
                 }
                 Input {
                     ref { onInputRef(it) }
                     attr {
-                        val isExpanded = expanded()
+                        val isExpanded = expanded() && !attachmentPanelVisible()
                         absolutePosition(
                             left = if (isExpanded) 12f else 52f,
-                            top = if (isExpanded) 10f else 16f,
+                            top = if (isExpanded) 10f + if (vm.pendingAttachments.isNotEmpty()) 56f else 0f else 16f,
                             right = if (isExpanded) 12f else 52f,
                         )
                         height(28f)
@@ -575,19 +668,22 @@ fun ViewContainer<*, *>.ComposerView(
                         placeholderColor(AppTheme.textTertiary)
                         returnKeyTypeSend()
                         maxTextLength(200)
-                        animation(Animation.easeOut(0.24f), isExpanded)
+                        animation(Animation.easeOut(0.24f), if (attachmentPanelVisible()) false else isExpanded)
                     }
                     event {
                         textDidChange { vm.inputText = it.text }
                         inputReturn { onSend(it.text) }
-                        inputFocus { onFocusChange(true) }
+                        inputFocus {
+                            if (attachmentPanelVisible()) onAttachClick()
+                            onFocusChange(true)
+                        }
                         inputBlur { onFocusChange(false) }
                         keyboardHeightChange { onKeyboardHeight(it.height) }
                     }
                 }
                 View {
                     attr {
-                        absolutePosition(left = 52f, top = 0f, right = 52f, bottom = 0f)
+                        absolutePosition(left = 52f, top = if (vm.pendingAttachments.isNotEmpty()) 56f else 0f, right = 52f, bottom = 0f)
                         allCenter()
                         opacity(if (voiceMode()) 1f else 0f)
                         touchEnable(voiceMode())
@@ -607,8 +703,8 @@ fun ViewContainer<*, *>.ComposerView(
                 }
                 View {
                     attr {
-                        val isExpanded = expanded()
-                        absolutePosition(right = 8f, top = if (isExpanded) 40f else 10f)
+                        val isExpanded = expanded() && !attachmentPanelVisible()
+                        absolutePosition(right = 8f, top = if (isExpanded) 40f + if (vm.pendingAttachments.isNotEmpty()) 56f else 0f else 10f)
                         size(36f, 36f)
                         borderRadius(18f)
                         allCenter()
@@ -616,7 +712,7 @@ fun ViewContainer<*, *>.ComposerView(
                             when {
                                 voiceMode() -> AppTheme.surfaceMuted
                                 vm.isGenerating -> AppTheme.ink
-                                vm.inputText.isNotBlank() -> AppTheme.ink
+                                vm.inputText.isNotBlank() || vm.pendingAttachments.isNotEmpty() -> AppTheme.ink
                                 else -> Color.TRANSPARENT
                             },
                         )
@@ -625,6 +721,7 @@ fun ViewContainer<*, *>.ComposerView(
                     event {
                         click {
                             when {
+                                attachmentPanelVisible() -> onAttachClick()
                                 voiceMode() -> onVoiceClick()
                                 vm.isGenerating -> onStop()
                                 vm.inputText.isNotBlank() -> onSend(vm.inputText)
@@ -632,72 +729,156 @@ fun ViewContainer<*, *>.ComposerView(
                             }
                         }
                     }
-                    vif({ voiceMode() }) { Icon(IconKind.KEYBOARD, 18f, AppTheme.textSecondary) }
+                    vif({ attachmentPanelVisible() }) { Icon(IconKind.CLOSE, 18f, AppTheme.textSecondary) }
                     velse {
-                        vif({ vm.isGenerating }) { Icon(IconKind.STOP, 14f, Color.WHITE) }
+                        vif({ voiceMode() }) { Icon(IconKind.KEYBOARD, 18f, AppTheme.textSecondary) }
                         velse {
-                            vif({ vm.inputText.isNotBlank() }) {
-                                Icon(IconKind.ARROW_UP, 18f, Color.WHITE, 2.4f)
-                            }
+                            vif({ vm.isGenerating }) { Icon(IconKind.STOP, 14f, Color.WHITE) }
                             velse {
-                                Icon(IconKind.VOICE, 20f, AppTheme.textSecondary, 1.8f)
+                                vif({ vm.inputText.isNotBlank() || vm.pendingAttachments.isNotEmpty() }) {
+                                    Icon(IconKind.ARROW_UP, 18f, Color.WHITE, 2.4f)
+                                }
+                                velse { Icon(IconKind.VOICE, 20f, AppTheme.textSecondary, 1.8f) }
                             }
                         }
                     }
                 }
             }
         }
+        // 附件面板：嵌入输入框下方，由 ComposerView 统一管理布局，与输入框紧密贴合。
         View {
             attr {
-                val isExpanded = expanded()
-                height(if (isExpanded) 0f else 24f)
-                opacity(if (isExpanded) 0f else 1f)
-                transform(Translate(0f, 0f, 0f, if (isExpanded) 8f else 0f))
-                allCenter(); overflow(true)
-                animation(Animation.easeOut(0.2f), isExpanded)
+                val isVisible = attachmentPanelVisible()
+                // 面板高度包含底部留白，避免入口卡片被 Android 导航栏裁切。
+                height(if (isVisible) 144f else 0f)
+                opacity(if (isVisible) 1f else 0f)
+                overflow(true)
+                marginTop(0f)
+                zIndex(5, useOutline = false)
+                paddingLeft(8f); paddingRight(8f); paddingTop(0f); paddingBottom(20f)
             }
-            Text {
+            View {
                 attr {
-                    text("行情数据来自腾讯证券，AI 内容仅供参考，不构成投资建议")
-                    fontSize(10f)
-                    color(AppTheme.textTertiary)
+                    flexDirectionRow()
+                    alignItemsStretch()
+                    justifyContentSpaceBetween()
+                    paddingLeft(10f); paddingRight(10f); paddingTop(10f); paddingBottom(10f)
+                }
+                AttachmentActionCard(IconKind.CAMERA, "拍照", onPickCamera)
+                AttachmentActionCard(IconKind.IMAGE, "相册", onPickPhoto)
+                AttachmentActionCard(IconKind.FOLDER, "文件", onPickFile)
+            }
+        }
+        // 键盘或附件面板状态下直接不创建免责声明节点，避免零高度动画节点仍叠加到输入框。
+        vif({ !expanded() && !keyboardVisible() && !attachmentPanelVisible() }) {
+            View {
+                attr { height(24f); allCenter() }
+                Text {
+                    attr {
+                        text("行情数据来自腾讯证券，AI 内容仅供参考，不构成投资建议")
+                        fontSize(10f)
+                        color(AppTheme.textTertiary)
+                    }
                 }
             }
         }
     }
 }
 
-/** Kimi 式长按录音浮层：底部面板升起，波形持续变化，松手后发送。 */
+private fun ViewContainer<*, *>.PendingAttachmentCard(attachment: Attachment, onRemove: () -> Unit) {
+    View {
+        attr {
+            width(if (attachment.kind == AttachmentKind.IMAGE) 42f else 128f)
+            height(40f)
+            marginRight(6f)
+            borderRadius(9f)
+            backgroundColor(AppTheme.surfaceMuted)
+            paddingLeft(8f); paddingRight(6f)
+            flexDirectionRow(); alignItemsCenter()
+        }
+        Text {
+            attr {
+                text(if (attachment.kind == AttachmentKind.IMAGE) "图片" else attachment.displayName)
+                fontSize(10f); color(AppTheme.textSecondary); lines(1); flex(1f)
+            }
+        }
+        View {
+            attr { size(18f, 18f); allCenter() }
+            event { click { onRemove() } }
+            Text { attr { text("×"); fontSize(13f); color(AppTheme.textTertiary) } }
+        }
+    }
+}
+
+/** 长按录音时手指所在区域：底部发送、左侧取消、右侧编辑。 */
+enum class VoiceRecordZone { SEND, EDIT, CANCEL }
+
+internal const val VOICE_OVERLAY_BODY = 360f
+
+private val voiceSendBlue = Color(0xFF4D8EFFL)
+private val voiceEditGray = Color(0xFFC4C4C4L)
+private val voiceFingerFill = Color(0, 0, 0, 0.12f)
+
+fun voiceRecordZone(
+    pageX: Float,
+    pageY: Float,
+    pageWidth: Float,
+    pageHeight: Float,
+    bottomInset: Float,
+): VoiceRecordZone {
+    val fromBottom = pageHeight - pageY
+    if (fromBottom <= 88f + bottomInset) return VoiceRecordZone.SEND
+    if (fromBottom <= 300f + bottomInset) {
+        val edge = pageWidth * 0.42f
+        if (pageX < edge) return VoiceRecordZone.CANCEL
+        if (pageX > pageWidth - edge) return VoiceRecordZone.EDIT
+    }
+    return VoiceRecordZone.SEND
+}
+
+/** Kimi 式长按录音浮层：面板升起，三态拖动，波形随区域变色。 */
 fun ViewContainer<*, *>.VoiceRecordingOverlay(
     visible: () -> Boolean,
     phase: () -> Int,
-    cancelArmed: () -> Boolean,
+    zone: () -> VoiceRecordZone,
+    fingerX: () -> Float,
+    fingerY: () -> Float,
+    pageHeight: Float,
     bottomInset: Float,
 ) {
+    val overlayHeight = VOICE_OVERLAY_BODY + bottomInset
     View {
         attr {
             val isVisible = visible()
             absolutePosition(left = 0f, right = 0f, bottom = 0f)
-            height(500f + bottomInset)
+            height(overlayHeight)
             paddingBottom(bottomInset)
             backgroundColor(Color.WHITE)
-            borderRadius(26f)
-            boxShadow(BoxShadow(0f, -8f, 30f, Color(0x14000000L)))
+            borderRadius(28f, 28f, 0f, 0f)
+            boxShadow(BoxShadow(0f, -6f, 28f, Color(0x14000000L)))
             opacity(if (isVisible) 1f else 0f)
-            transform(Translate(0f, 0f, 0f, if (isVisible) 0f else 540f))
-            animation(Animation.easeOut(0.24f), isVisible)
+            transform(Translate(0f, 0f, 0f, if (isVisible) 0f else overlayHeight + 24f))
+            animation(Animation.easeOut(0.26f), isVisible)
             touchEnable(false)
             zIndex(20, useOutline = false)
         }
         View {
-            attr { alignItemsCenter(); paddingTop(72f) }
-            VoiceWave(phase, cancelArmed)
+            attr { alignItemsCenter(); paddingTop(56f) }
+            VoiceWave(phase, zone)
             Text {
                 attr {
-                    text(if (cancelArmed()) "松开取消" else "松开发送")
+                    val current = zone()
+                    text(
+                        when (current) {
+                            VoiceRecordZone.SEND -> "松开发送"
+                            VoiceRecordZone.EDIT -> "编辑文字"
+                            VoiceRecordZone.CANCEL -> "取消输入"
+                        },
+                    )
                     fontSize(12f)
-                    color(if (cancelArmed()) AppTheme.down else AppTheme.textTertiary)
+                    color(AppTheme.textTertiary)
                     marginTop(12f)
+                    animation(Animation.easeOut(0.16f), current)
                 }
             }
         }
@@ -705,117 +886,164 @@ fun ViewContainer<*, *>.VoiceRecordingOverlay(
         View {
             attr {
                 flexDirectionRow(); justifyContentSpaceBetween(); alignItemsCenter()
-                paddingLeft(42f); paddingRight(42f); marginBottom(24f)
+                paddingLeft(36f); paddingRight(36f); marginBottom(22f); height(48f)
             }
-            Icon(IconKind.CLOSE, 18f, AppTheme.textTertiary)
-            Icon(IconKind.EDIT, 18f, AppTheme.textTertiary)
+            VoiceTargetChip(
+                armed = { zone() == VoiceRecordZone.CANCEL },
+                danger = true,
+                icon = IconKind.CLOSE,
+                label = "取消",
+            )
+            VoiceTargetChip(
+                armed = { zone() == VoiceRecordZone.EDIT },
+                danger = false,
+                icon = IconKind.EDIT,
+                label = "编辑",
+            )
         }
         View {
             attr {
-                height(58f)
+                val sending = zone() == VoiceRecordZone.SEND
+                height(56f)
                 marginLeft(8f); marginRight(8f); marginBottom(8f)
-                borderRadius(29f)
+                borderRadius(28f)
                 allCenter()
-                backgroundColor(Color.WHITE)
-                boxShadow(BoxShadow(0f, 3f, 18f, Color(0x16000000L)))
+                backgroundColor(if (sending) Color.WHITE else AppTheme.surfaceMuted)
+                boxShadow(
+                    if (sending) BoxShadow(0f, 4f, 18f, Color(0x18000000L))
+                    else BoxShadow(0f, 0f, 0f, Color.TRANSPARENT),
+                )
+                animation(Animation.easeOut(0.18f), sending)
             }
-            View {
-                attr { flexDirectionRow(); alignItemsCenter() }
-                Text {
-                    attr {
-                        text(if (cancelArmed()) "松开取消" else "松开发送")
-                        fontSize(14f); fontWeight600()
-                        color(if (cancelArmed()) AppTheme.down else Color(0xFF4D9FEFL))
-                    }
-                }
-                View {
-                    attr { flexDirectionRow(); alignItemsCenter(); marginLeft(5f); height(16f) }
-                    repeat(4) { index ->
-                        View {
-                            attr {
-                                width(2f); height(if ((phase() + index) % 3 == 0) 12f else 7f)
-                                borderRadius(1f); marginRight(2f)
-                                backgroundColor(if (cancelArmed()) AppTheme.down else Color(0xFF4D9FEFL))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun ViewContainer<*, *>.VoiceWave(phase: () -> Int, cancelArmed: () -> Boolean) {
-    val levels = listOf(3f, 6f, 10f, 14f, 8f, 5f, 12f, 16f, 9f, 5f, 13f, 8f)
-    View {
-        attr { flexDirectionRow(); alignItemsCenter(); height(22f) }
-        repeat(20) { index ->
-            View {
+            Text {
                 attr {
-                    val p = phase()
-                    width(2f)
-                    height(levels[(index + p) % levels.size])
-                    borderRadius(1f)
-                    marginRight(2f)
-                    backgroundColor(if (cancelArmed()) AppTheme.down else Color(0xFF4D9FEFL))
-                    animation(Animation.easeInOut(0.1f), p)
+                    val sending = zone() == VoiceRecordZone.SEND
+                    text(if (sending) "松开发送" else "语音输入")
+                    fontSize(15f); fontWeight600()
+                    color(if (sending) voiceSendBlue else AppTheme.textTertiary)
+                    animation(Animation.easeOut(0.18f), sending)
                 }
+            }
+        }
+        View {
+            attr {
+                val isVisible = visible()
+                absolutePosition(
+                    left = fingerX() - 19f,
+                    top = fingerY() - (pageHeight - overlayHeight) - 19f,
+                )
+                size(38f, 38f)
+                borderRadius(19f)
+                backgroundColor(voiceFingerFill)
+                opacity(if (isVisible) 1f else 0f)
+                touchEnable(false)
+                animation(Animation.linear(0.01f), fingerX() + fingerY())
             }
         }
     }
 }
 
-/** 输入框上方的附件操作面板，保持轻量但具备完整的打开、选择、关闭闭环。 */
-fun ViewContainer<*, *>.AttachmentPanel(
-    visible: () -> Boolean,
-    onPickImage: () -> Unit,
-    onPickFile: () -> Unit,
-    onPickStock: () -> Unit,
+private fun ViewContainer<*, *>.VoiceTargetChip(
+    armed: () -> Boolean,
+    danger: Boolean,
+    icon: IconKind,
+    label: String,
 ) {
     View {
         attr {
-            val isVisible = visible()
-            height(if (isVisible) 82f else 0f)
-            opacity(if (isVisible) 1f else 0f)
+            val isArmed = armed()
+            height(48f)
+            width(if (isArmed) 112f else 44f)
+            borderRadius(24f)
+            paddingLeft(13f)
+            flexDirectionRow()
+            alignItemsCenter()
             overflow(true)
-            animation(Animation.easeOut(0.2f), isVisible)
-            paddingLeft(16f); paddingRight(16f); paddingBottom(8f)
+            backgroundColor(if (isArmed) Color.WHITE else Color(0x00FFFFFFL))
+            animation(Animation.easeOut(0.18f), isArmed)
         }
-        View {
+        vif({ armed() }) {
+            Icon(icon, 18f, if (danger) AppTheme.down else AppTheme.textPrimary)
+        }
+        velse {
+            Icon(icon, 18f, AppTheme.textTertiary)
+        }
+        Text {
             attr {
-                flexDirectionRow()
-                alignItemsCenter()
-                justifyContentSpaceBetween()
-                backgroundColor(Color.WHITE)
-                borderRadius(16f)
-                paddingLeft(12f); paddingRight(12f); paddingTop(10f); paddingBottom(10f)
-                boxShadow(BoxShadow(0f, 2f, 12f, Color(0x12000000L)))
+                val isArmed = armed()
+                text(label)
+                fontSize(14f)
+                fontWeight600()
+                color(if (danger) AppTheme.down else AppTheme.textPrimary)
+                marginLeft(6f)
+                opacity(if (isArmed) 1f else 0f)
+                animation(Animation.easeOut(0.18f), isArmed)
             }
-            AttachmentAction(IconKind.CHART, "股票", onPickStock)
-            AttachmentAction(IconKind.BOOK, "文件", onPickFile)
-            AttachmentAction(IconKind.CANDLE, "图片", onPickImage)
         }
     }
 }
 
-private fun ViewContainer<*, *>.AttachmentAction(icon: IconKind, title: String, onClick: () -> Unit) {
+private fun ViewContainer<*, *>.VoiceWave(phase: () -> Int, zone: () -> VoiceRecordZone) {
+    View {
+        attr { flexDirectionRow(); alignItemsCenter(); height(18f) }
+        repeat(16) { index ->
+            View {
+                attr {
+                    val p = phase()
+                    val current = zone()
+                    width(4f)
+                    height(waveBarHeight(index, p, current))
+                    borderRadius(2f)
+                    marginRight(if (index == 15) 0f else 3.5f)
+                    backgroundColor(waveColor(current))
+                    animation(Animation.easeInOut(0.12f), p)
+                }
+            }
+        }
+    }
+}
+
+private fun waveBarHeight(index: Int, phase: Int, zone: VoiceRecordZone): Float {
+    val wave = ((sin((phase * 0.28f + index * 0.62f).toDouble()) + 1.0) * 0.5).toFloat()
+    val amplitude = if (zone == VoiceRecordZone.SEND) 6f else 3.2f
+    return 7f + wave * amplitude
+}
+
+private fun waveColor(zone: VoiceRecordZone): Color = when (zone) {
+    VoiceRecordZone.SEND -> voiceSendBlue
+    VoiceRecordZone.EDIT -> voiceEditGray
+    VoiceRecordZone.CANCEL -> AppTheme.down
+}
+
+private fun ViewContainer<*, *>.AttachmentActionCard(icon: IconKind, title: String, onClick: () -> Unit) {
     View {
         attr {
             flex(1f)
+            height(96f)
             alignItemsCenter()
-            paddingTop(2f); paddingBottom(2f)
+            justifyContentCenter()
+            marginLeft(4f); marginRight(4f)
         }
         event { click { onClick() } }
         View {
             attr {
-                size(34f, 34f)
-                borderRadius(17f)
+                width(96f)
+                height(96f)
+                borderRadius(14f)
+                flexDirectionColumn()
                 allCenter()
                 backgroundColor(AppTheme.surfaceMuted)
             }
-            Icon(icon, 17f, AppTheme.textSecondary)
+            View {
+                attr {
+                    width(28f)
+                    height(28f)
+                    allCenter()
+                }
+                Icon(icon, 24f, AppTheme.textSecondary, 1.6f)
+            }
+            Text { attr { text(title); fontSize(13f); color(AppTheme.textSecondary); marginTop(8f) } }
         }
-        Text { attr { text(title); fontSize(11f); color(AppTheme.textSecondary); marginTop(4f) } }
     }
 }
 

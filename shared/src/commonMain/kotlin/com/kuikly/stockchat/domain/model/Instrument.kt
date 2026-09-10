@@ -42,6 +42,7 @@ data class Instrument(
     /** 腾讯行情接口使用的代码（指数与个股规则不同时可覆盖） */
     private val tencentCodeOverride: String? = null,
 ) {
+    fun tencentCodeOverrideOrNull(): String? = tencentCodeOverride
     /** 展示代码，如 00700.HK / 600519.SH / HSI.HK */
     val displayCode: String
         get() = "$code.${market.suffix}"

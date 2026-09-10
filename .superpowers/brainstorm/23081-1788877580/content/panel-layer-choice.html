@@ -1,0 +1,50 @@
+<style>
+  .phone-grid { display:grid; grid-template-columns:repeat(2,minmax(260px,1fr)); gap:24px; margin-top:24px; }
+  .phone-card { cursor:pointer; border:2px solid var(--border); border-radius:20px; overflow:hidden; background:var(--card-bg); transition:.18s ease; }
+  .phone-card:hover { transform:translateY(-2px); border-color:var(--accent); }
+  .phone-card.selected { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent); }
+  .phone { position:relative; width:250px; height:520px; margin:24px auto; border:8px solid #202124; border-radius:34px; overflow:hidden; background:white; color:#24262a; box-shadow:0 16px 40px rgba(0,0,0,.16); }
+  .status { height:26px; padding:8px 13px 0; font-size:9px; display:flex; justify-content:space-between; }
+  .welcome { height:270px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; }
+  .logo { color:#3375d6; font-size:11px; font-weight:700; }
+  .chips { display:flex; gap:5px; } .chip { padding:5px 7px; background:#f3f6fa; border-radius:10px; font-size:7px; }
+  .composer { position:absolute; left:8px; right:8px; height:70px; border-radius:18px; background:#fff; box-shadow:0 1px 8px rgba(0,0,0,.12); padding:9px 10px; box-sizing:border-box; z-index:3; }
+  .composer.reference { bottom:156px; } .composer.current { bottom:104px; }
+  .placeholder-line { color:#b6b8bd; font-size:8px; height:28px; }
+  .composer-row { display:flex; align-items:center; justify-content:space-between; font-size:8px; }
+  .close { width:18px;height:18px;border:1px solid #969ba4;border-radius:50%;display:grid;place-items:center;font-size:12px; }
+  .panel { position:absolute; left:0; right:0; bottom:0; height:150px; background:#fff; padding:18px 9px 0; box-sizing:border-box; z-index:2; }
+  .actions { display:flex; gap:8px; } .action { flex:1; height:70px; background:#f6f7f8; border-radius:10px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; font-size:8px; }
+  .icon { font-size:16px; }
+  .tip { margin-top:17px; text-align:center; color:#b5b8be; font-size:7px; }
+  .current-backdrop { position:absolute; inset:26px 0 182px; background:rgba(0,0,0,.25); z-index:1; }
+  .current-panel { position:absolute; left:8px; right:8px; bottom:8px; height:92px; border-radius:14px; background:#fff; padding:10px; box-sizing:border-box; box-shadow:0 2px 12px rgba(0,0,0,.12); z-index:3; }
+  .card-copy { padding:0 22px 22px; } .card-copy h3 { margin:0 0 8px; } .card-copy p { margin:0; color:var(--muted); line-height:1.5; }
+  @media(max-width:760px){.phone-grid{grid-template-columns:1fr}}
+</style>
+
+<h2>附件面板应该采用哪一种层级行为？</h2>
+<p class="subtitle">已按你的要求省略输入框下方的照片预览列表；这里只比较面板与页面、键盘之间的关系。</p>
+
+<div class="phone-grid">
+  <div class="phone-card" data-choice="deepseek-replacement" onclick="toggleSelect(this)">
+    <div class="phone">
+      <div class="status"><span>22:14</span><span>● Wi‑Fi ▰</span></div>
+      <div class="welcome"><div class="logo">◈ 有什么我能帮你的吗？</div><div class="chips"><span class="chip">快速模式</span><span class="chip">专家模式</span><span class="chip">识图模式</span></div></div>
+      <div class="composer reference"><div class="placeholder-line">发消息</div><div class="composer-row"><span>▧ 深度思考　<span style="color:#377cd6">◉ 智能搜索</span></span><span class="close">×</span></div></div>
+      <div class="panel"><div class="actions"><div class="action"><span class="icon">▣</span>拍照</div><div class="action"><span class="icon">▧</span>相册</div><div class="action"><span class="icon">◇</span>文件</div></div><div class="tip">ⓘ 快速模式下，仅图片文字</div></div>
+    </div>
+    <div class="card-copy"><h3>A · DeepSeek 式键盘替换（推荐）</h3><p>面板占据键盘区域；内容区不变暗；输入框随面板上移；加号变为“×”，再次点击关闭。</p></div>
+  </div>
+
+  <div class="phone-card" data-choice="current-inline" onclick="toggleSelect(this)">
+    <div class="phone">
+      <div class="status"><span>22:14</span><span>● Wi‑Fi ▰</span></div>
+      <div class="welcome"><div class="logo">◈ 有什么我能帮你的吗？</div><div class="chips"><span class="chip">快速模式</span><span class="chip">专家模式</span><span class="chip">识图模式</span></div></div>
+      <div class="current-backdrop"></div>
+      <div class="composer current"><div class="placeholder-line">输入股票名称、代码或问题</div><div class="composer-row"><span class="close">＋</span><span>🎙</span></div></div>
+      <div class="current-panel"><div class="actions"><div class="action"><span class="icon">▣</span>拍照</div><div class="action"><span class="icon">▧</span>照片</div><div class="action"><span class="icon">◇</span>本地文件</div></div></div>
+    </div>
+    <div class="card-copy"><h3>B · 当前内嵌面板</h3><p>面板仅在输入组件内部增高；内容区带遮罩；加号保持原样；整体高度明显小于系统键盘。</p></div>
+  </div>
+</div>

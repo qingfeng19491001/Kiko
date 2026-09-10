@@ -89,7 +89,7 @@ class MarketRepository(private val http: HttpClient) {
 
     fun loadBars(instrument: Instrument, period: KLinePeriod, count: Int, callback: (List<KLineBar>?) -> Unit) {
         val actualPeriod = if (period == KLinePeriod.MINUTE) KLinePeriod.DAY else period
-        val cacheKey = "${instrument.key}#${actualPeriod.apiKey}#$count"
+        val cacheKey = "${instrument.key}#${actualPeriod.name}#$count"
         val now = DateTime.currentTimestamp()
         barsCache[cacheKey]?.let { if (now - it.at < cacheTtlMs * 5) { callback(it.value); return } }
         if (offlineMode) {

@@ -17,12 +17,13 @@ import com.kuikly.stockchat.android.adapter.KRLogAdapter
 import com.kuikly.stockchat.android.adapter.KRRouterAdapter
 import com.kuikly.stockchat.android.adapter.KRThreadAdapter
 import com.kuikly.stockchat.android.adapter.KRUncaughtExceptionHandlerAdapter
+import com.kuikly.stockchat.android.attachment.KRAttachmentModule
 import com.kuikly.stockchat.data.ai.AndroidPlatformContext
-import com.tencent.kuikly.core.render.android.IKuiklyRenderExport
 import com.tencent.kuikly.core.render.android.adapter.KuiklyRenderAdapterManager
 import com.tencent.kuikly.core.render.android.css.ktx.toMap
 import com.tencent.kuikly.core.render.android.expand.KuiklyRenderViewBaseDelegator
 import com.tencent.kuikly.core.render.android.expand.KuiklyRenderViewBaseDelegatorDelegate
+import com.tencent.kuikly.core.render.android.IKuiklyRenderExport
 import com.tencent.kuiklybase.kline.host.registerKuiklyKLineChart
 import org.json.JSONObject
 
@@ -35,6 +36,7 @@ class KuiklyRenderActivity : AppCompatActivity(), KuiklyRenderViewBaseDelegatorD
     private lateinit var containerView: ViewGroup
     private val renderViewDelegator = KuiklyRenderViewBaseDelegator(this)
     private var backStartedWithIme = false
+    private var attachmentModule: KRAttachmentModule? = null
 
     private val pageName: String
         get() = intent.getStringExtra(KEY_PAGE_NAME)?.takeIf { it.isNotEmpty() } ?: DEFAULT_PAGE
@@ -86,6 +88,20 @@ class KuiklyRenderActivity : AppCompatActivity(), KuiklyRenderViewBaseDelegatorD
     override fun registerExternalRenderView(kuiklyRenderExport: IKuiklyRenderExport) {
         super.registerExternalRenderView(kuiklyRenderExport)
         kuiklyRenderExport.registerKuiklyKLineChart()
+    }
+
+    override fun registerExternalModule(kuiklyRenderExport: IKuiklyRenderExport) {
+        super.registerExternalModule(kuiklyRenderExport)
+        kuiklyRenderExport.moduleExport(KRAttachmentModule.MODULE_NAME) {
+            KRAttachmentModule().also { attachmentModule = it }
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == KRAttachmentModule.REQUEST_CAMERA || requestCode == KRAttachmentModule.REQUEST_PICKER) {
+            attachmentModule?.onActivityResult(requestCode, resultCode, data)
+        }
     }
 
     private fun createPageData(): Map<String, Any> {

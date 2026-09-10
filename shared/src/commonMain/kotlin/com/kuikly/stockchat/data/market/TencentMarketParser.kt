@@ -153,7 +153,7 @@ object TencentMarketParser {
 
     private fun parseBar(row: JSONArray): KLineBar? {
         if (row.length() < 6) return null
-        val date = row.optString(0) ?: return null
+        val date = normalizeBarDate(row.optString(0) ?: return null) ?: return null
         val open = row.optString(1)?.toDoubleOrNull() ?: return null
         val close = row.optString(2)?.toDoubleOrNull() ?: return null
         val high = row.optString(3)?.toDoubleOrNull() ?: return null
@@ -161,6 +161,25 @@ object TencentMarketParser {
         val volume = row.optString(5)?.toDoubleOrNull() ?: 0.0
         if (open <= 0 || close <= 0) return null
         return KLineBar(date, open, close, high, low, volume)
+    }
+
+    /**
+     * 统一 K 线日期格式：
+     * - 日/周/月接口返回 "yyyy-MM-dd"
+     * - 分钟级接口（m1/m5/...）返回 "yyyyMMddHHmm" 紧凑格式
+     * 统一转成 DateUtil 可解析的 "yyyy-MM-dd[ HH:mm]"。
+     */
+    private fun normalizeBarDate(raw: String): String? {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return null
+        if (trimmed.contains('-')) return trimmed
+        val digits = trimmed.filter { it.isDigit() }
+        return when (digits.length) {
+            8 -> "${digits.substring(0, 4)}-${digits.substring(4, 6)}-${digits.substring(6, 8)}"
+            12 -> "${digits.substring(0, 4)}-${digits.substring(4, 6)}-${digits.substring(6, 8)} " +
+                "${digits.substring(8, 10)}:${digits.substring(10, 12)}"
+            else -> null
+        }
     }
 
     // endregion

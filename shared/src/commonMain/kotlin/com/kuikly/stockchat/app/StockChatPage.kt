@@ -2,12 +2,24 @@ package com.kuikly.stockchat.app
 
 import com.kuikly.stockchat.data.ai.AiService
 import com.kuikly.stockchat.data.ai.RemoteAiEngine
+import com.kuikly.stockchat.data.ai.RemoteIntentRecognizer
 import com.kuikly.stockchat.data.ai.VoiceModule
+import com.kuikly.stockchat.data.attachment.AttachmentModule
+import com.kuikly.stockchat.data.attachment.KuiklyFileContentReader
+import com.kuikly.stockchat.domain.attachment.Attachment
+import com.kuikly.stockchat.domain.attachment.AttachmentKind
+import com.kuikly.stockchat.domain.attachment.AttachmentSource
+import com.kuikly.stockchat.domain.attachment.AttachmentStatus
 import com.kuikly.stockchat.data.chat.ConversationRepository
 import com.kuikly.stockchat.data.chat.KuiklyKeyValueStore
+import com.kuikly.stockchat.data.chat.SettingsRepository
+import com.kuikly.stockchat.data.market.DerivedMarketRepository
 import com.kuikly.stockchat.data.market.MarketRepository
+import com.kuikly.stockchat.data.market.TencentSymbolSearch
+import com.kuikly.stockchat.domain.model.InstrumentCache
+import com.kuikly.stockchat.domain.model.InstrumentCodec
+import com.kuikly.stockchat.domain.model.InstrumentResolver
 import com.kuikly.stockchat.data.network.KuiklyHttpClient
-import com.kuikly.stockchat.ui.chat.AttachmentPanel
 import com.kuikly.stockchat.ui.chat.AssistantMessageView
 import com.kuikly.stockchat.ui.chat.ChatNavBar
 import com.kuikly.stockchat.ui.chat.ChatViewModel
@@ -17,8 +29,10 @@ import com.kuikly.stockchat.ui.chat.DrawerMotion
 import com.kuikly.stockchat.ui.chat.DrawerState
 import com.kuikly.stockchat.ui.chat.HistoryDrawerContent
 import com.kuikly.stockchat.ui.chat.UserMessageView
+import com.kuikly.stockchat.ui.chat.VoiceRecordZone
 import com.kuikly.stockchat.ui.chat.VoiceRecordingOverlay
 import com.kuikly.stockchat.ui.chat.WelcomeView
+import com.kuikly.stockchat.ui.chat.voiceRecordZone
 import com.kuikly.stockchat.ui.chat.chatDrawerWidth
 import com.kuikly.stockchat.ui.chat.followPan
 import com.kuikly.stockchat.ui.components.Icon
@@ -41,7 +55,9 @@ import com.tencent.kuikly.core.directives.vfor
 import com.tencent.kuikly.core.directives.velse
 import com.tencent.kuikly.core.directives.vif
 import com.tencent.kuikly.core.module.RouterModule
+import com.tencent.kuikly.core.module.Module
 import com.tencent.kuikly.core.nvi.serialization.json.JSONObject
+import com.tencent.kuikly.core.nvi.serialization.json.JSONArray
 import com.tencent.kuikly.core.pager.Pager
 import com.tencent.kuikly.core.reactive.handler.observable
 import com.tencent.kuikly.core.timer.setTimeout
@@ -68,12 +84,18 @@ internal class StockChatPage : Pager() {
     private var attachmentPanelVisible by observable(false)
     private var voiceMode by observable(false)
     private var voiceRecording by observable(false)
-    private var voiceCancelArmed by observable(false)
+    private var voiceZone by observable(VoiceRecordZone.SEND)
     private var voiceWavePhase by observable(0)
+    private var voiceFingerX by observable(0f)
+    private var voiceFingerY by observable(0f)
     private var listRef: ViewRef<ListView<*, *>>? = null
     private var inputRef: ViewRef<InputView>? = null
     private var listContentHeight = 0f
     private var followBottom = true
+
+    override fun createExternalModules(): Map<String, Module>? = mapOf(
+        AttachmentModule.MODULE_NAME to AttachmentModule(),
+    )
 
     private val drawerBackCallback = object : BackPressCallback() {
         override fun handleOnBackPressed() {
@@ -83,10 +105,9 @@ internal class StockChatPage : Pager() {
     private val accessoryBackCallback = object : BackPressCallback() {
         override fun handleOnBackPressed() {
             attachmentPanelVisible = false
+            if (voiceRecording) voiceModule.cancelListening()
             voiceMode = false
-            voiceRecording = false
-            voiceCancelArmed = false
-            ++voiceWaveGeneration
+            resetVoiceRecording()
             syncAccessoryBackHandler()
         }
     }
@@ -96,11 +117,21 @@ internal class StockChatPage : Pager() {
         val http = KuiklyHttpClient(this)
         val store = KuiklyKeyValueStore(this)
         val marketRepository = MarketRepository(http)
+        val derivedRepository = DerivedMarketRepository(http)
         val aiEngine = RemoteAiEngine(http)
         voiceModule = VoiceModule.createDefault()
         vm = ChatViewModel(
-            aiService = AiService(pagerId, marketRepository, aiEngine),
+            aiService = AiService(
+                pagerId,
+                marketRepository,
+                aiEngine,
+                derivedRepository,
+                RemoteIntentRecognizer(http),
+                KuiklyFileContentReader(this),
+                InstrumentResolver(TencentSymbolSearch(http)::search),
+            ),
             conversationRepository = ConversationRepository(store),
+            settingsRepository = SettingsRepository(store),
             marketRepository = marketRepository,
         )
         vm.onReplyCompleted = { text ->
@@ -111,9 +142,12 @@ internal class StockChatPage : Pager() {
             }
         }
         vm.loadHistory()
+        vm.loadSettings()
         vm.loadOverview()
+        val hint = InstrumentCodec.decode(pageData.params.optJSONObject("instrument"))
+        hint?.let(InstrumentCache::put)
         pageData.params.optString("prompt").takeIf { it.isNotEmpty() }?.let { prompt ->
-            setTimeout(400) { vm.send(prompt) }
+            setTimeout(400) { vm.send(prompt, hintInstruments = listOfNotNull(hint)) }
         }
     }
 
@@ -166,8 +200,9 @@ internal class StockChatPage : Pager() {
                         flex(1f)
                         backgroundColor(Color(0xFFFFFFFFL))
                         opacity(1f - DrawerMotion.SCRIM_ALPHA * ctx.drawer.progress)
-                        paddingBottom(if (ctx.keyboardHeight > 0) ctx.keyboardHeight else bottomInset)
-                        animation(Animation.easeOut(0.2f), ctx.keyboardHeight)
+                        // 附件面板打开时始终使用系统安全区，不继承上一次键盘高度。
+                        val bottomPadding = if (ctx.attachmentPanelVisible) bottomInset else if (ctx.keyboardHeight > 0) ctx.keyboardHeight else bottomInset
+                        paddingBottom(bottomPadding)
                     }
                     ChatNavBar(
                         statusBarHeight = ctx.pagerData.statusBarHeight,
@@ -235,8 +270,6 @@ internal class StockChatPage : Pager() {
                             }
                             vfor({ ctx.vm.messages }) { message ->
                                 View {
-                                    attr { capture(CaptureRule.pan(CaptureRuleDirection.HORIZONTAL)) }
-                                    event { followPan { params -> ctx.handleHomeSwipe(params) } }
                                     if (message.isUser) {
                                         UserMessageView(message)
                                     } else {
@@ -255,31 +288,42 @@ internal class StockChatPage : Pager() {
                     }
                     ComposerView(
                         vm = ctx.vm,
-                        expanded = { ctx.composerFocused },
+                        // 附件面板使用固定的收起态输入框布局，避免从键盘态切入时高度漂移。
+                        expanded = { (ctx.composerFocused || ctx.keyboardHeight > 0f) && !ctx.attachmentPanelVisible },
+                        keyboardVisible = { ctx.keyboardHeight > 0f },
+                        attachmentPanelVisible = { ctx.attachmentPanelVisible },
                         voiceMode = { ctx.voiceMode },
                         onSend = { ctx.send(it) },
                         onStop = { ctx.vm.stopGenerating() },
                         onKeyboardHeight = {
-                            ctx.keyboardHeight = it
-                            ctx.composerFocused = it > 0f
+                            // 面板态与键盘态互斥。收起键盘的异步回调可能晚于面板状态切换到达，
+                            // 此时必须丢弃它，不能让旧键盘高度再次把面板向上/向下推。
+                            if (ctx.attachmentPanelVisible) {
+                                ctx.keyboardHeight = 0f
+                                ctx.composerFocused = false
+                            } else {
+                                ctx.keyboardHeight = it
+                                ctx.composerFocused = it > 0f
+                            }
                         },
                         onFocusChange = { ctx.composerFocused = it },
                         onInputRef = { ctx.inputRef = it },
                         onAttachClick = { ctx.toggleAttachmentPanel() },
                         onVoiceClick = { ctx.toggleVoiceMode() },
                         onVoiceLongPress = { ctx.handleVoiceLongPress(it) },
-                    )
-                    AttachmentPanel(
-                        visible = { ctx.attachmentPanelVisible },
-                        onPickImage = { ctx.selectAttachment("图片") },
-                        onPickFile = { ctx.selectAttachment("文件") },
-                        onPickStock = { ctx.selectAttachment("股票") },
+                        onPickCamera = { ctx.selectAttachment("拍照") },
+                        onPickPhoto = { ctx.selectAttachment("照片") },
+                        onPickFile = { ctx.selectAttachment("本地文件") },
+                        onRemoveAttachment = { ctx.vm.removePendingAttachment(it) },
                     )
                 }
                 VoiceRecordingOverlay(
                     visible = { ctx.voiceRecording },
                     phase = { ctx.voiceWavePhase },
-                    cancelArmed = { ctx.voiceCancelArmed },
+                    zone = { ctx.voiceZone },
+                    fingerX = { ctx.voiceFingerX },
+                    fingerY = { ctx.voiceFingerY },
+                    pageHeight = ctx.pagerData.pageViewHeight,
                     bottomInset = bottomInset,
                 )
             }
@@ -325,10 +369,11 @@ internal class StockChatPage : Pager() {
                     vm = ctx.vm,
                     statusBarHeight = maxOf(ctx.pagerData.statusBarHeight, ctx.pagerData.safeAreaInsets.top),
                     bottomInset = bottomInset,
+                    onClose = { if (!ctx.suppressDrawerClick) ctx.closeDrawer() },
                     onOpen = { if (!ctx.suppressDrawerClick) ctx.vm.openConversation(it) },
                     onDelete = { if (!ctx.suppressDrawerClick) ctx.vm.deleteConversation(it) },
                     onNewChat = { if (!ctx.suppressDrawerClick) ctx.vm.newConversation() },
-                    onClearAll = { if (!ctx.suppressDrawerClick) ctx.vm.clearAllConversations() },
+                    onSettings = { if (!ctx.suppressDrawerClick) ctx.openSettings() },
                     onPan = { params -> ctx.handleCloseSwipe(params) },
                 )
             }
@@ -338,9 +383,7 @@ internal class StockChatPage : Pager() {
     private fun send(text: String) {
         if (text.isBlank()) return
         attachmentPanelVisible = false
-        voiceRecording = false
-        voiceCancelArmed = false
-        ++voiceWaveGeneration
+        resetVoiceRecording()
         syncAccessoryBackHandler()
         followBottom = true
         inputRef?.view?.setText("")
@@ -358,15 +401,19 @@ internal class StockChatPage : Pager() {
     private fun openDrawer() {
         attachmentPanelVisible = false
         voiceMode = false
-        voiceRecording = false
-        voiceCancelArmed = false
-        ++voiceWaveGeneration
+        resetVoiceRecording()
         syncAccessoryBackHandler()
         dismissKeyboard()
         settleDrawer(1f)
     }
 
-    private fun closeDrawer() = settleDrawer(0f)
+    private fun closeDrawer() {
+        if (vm.drawerSearchOpen) {
+            vm.drawerSearchOpen = false
+            vm.onDrawerQueryChange("")
+        }
+        settleDrawer(0f)
+    }
 
     /** Advance the displayed progress itself, including radius, rather than animating a target flag. */
     private fun settleDrawer(target: Float) {
@@ -412,38 +459,76 @@ internal class StockChatPage : Pager() {
     }
 
     private fun toggleTts() {
-        vm.ttsEnabled = !vm.ttsEnabled
+        vm.persistTtsEnabled(!vm.ttsEnabled)
         if (!vm.ttsEnabled) voiceModule.stopSpeaking()
         vm.banner = if (vm.ttsEnabled) "语音播报已开启，下一条回复将自动朗读" else "语音播报已关闭"
     }
 
     private fun toggleAttachmentPanel() {
+        if (voiceRecording) voiceModule.cancelListening()
         voiceMode = false
-        voiceRecording = false
+        resetVoiceRecording()
         attachmentPanelVisible = !attachmentPanelVisible
-        if (attachmentPanelVisible) dismissKeyboard()
+        if (attachmentPanelVisible) {
+            // 附件面板与系统键盘互斥：先结束输入焦点，再展示面板。
+            keyboardHeight = 0f
+            composerFocused = false
+            dismissKeyboard()
+        }
+        syncAccessoryBackHandler()
+    }
+
+    private fun closeAttachmentPanel() {
+        if (!attachmentPanelVisible) return
+        attachmentPanelVisible = false
         syncAccessoryBackHandler()
     }
 
     private fun selectAttachment(type: String) {
-        attachmentPanelVisible = false
-        voiceMode = false
-        syncAccessoryBackHandler()
-        val prompt = when (type) {
-            "股票" -> "结合腾讯控股最新行情分析后市"
-            "图片" -> "根据腾讯控股走势图分析近期趋势"
-            else -> "解读腾讯控股财报中的主要风险"
+        val module = acquireModule<AttachmentModule>(AttachmentModule.MODULE_NAME)
+        val callback: (JSONObject?) -> Unit = { result: JSONObject? ->
+            setTimeout(0) {
+                if (result?.optBoolean("cancelled", false) == true) return@setTimeout
+                val attachments = result?.optJSONArray("attachments")?.let(::decodeAttachments).orEmpty()
+                if (attachments.isNotEmpty()) {
+                    vm.addPendingAttachments(attachments)
+                    vm.banner = "已添加${attachments.size}个附件，可继续编辑后发送"
+                }
+                attachmentPanelVisible = false
+                voiceMode = false
+                syncAccessoryBackHandler()
+            }
+            Unit
         }
-        inputRef?.view?.setText(prompt)
-        vm.inputText = prompt
-        vm.banner = "已添加${type}上下文，可编辑后发送"
+        when (type) {
+            "拍照" -> module.openCamera(callback)
+            "照片" -> module.openPhotoLibrary(callback)
+            else -> module.openFilePicker(callback)
+        }
     }
+
+    private fun decodeAttachments(array: JSONArray): List<Attachment> =
+        (0 until array.length()).mapNotNull { index ->
+            array.optJSONObject(index)?.let { json ->
+                val kind = if (json.optString("kind") == "IMAGE") AttachmentKind.IMAGE else AttachmentKind.DOCUMENT
+                val source = when (json.optString("source")) {
+                    "CAMERA" -> AttachmentSource.CAMERA
+                    "PHOTO_LIBRARY" -> AttachmentSource.PHOTO_LIBRARY
+                    else -> AttachmentSource.FILE
+                }
+                Attachment(
+                    id = json.optString("id"), displayName = json.optString("displayName"),
+                    mimeType = json.optString("mimeType"), byteSize = json.optLong("byteSize"),
+                    localPath = json.optString("localPath"), thumbnailPath = json.optString("thumbnailPath").ifEmpty { null },
+                    source = source, kind = kind,
+                    status = AttachmentStatus.READY,
+                )
+            }
+        }
 
     private fun toggleVoiceMode() {
         attachmentPanelVisible = false
-        voiceRecording = false
-        voiceCancelArmed = false
-        ++voiceWaveGeneration
+        resetVoiceRecording()
         voiceMode = !voiceMode
         if (voiceMode) {
             dismissKeyboard()
@@ -454,10 +539,19 @@ internal class StockChatPage : Pager() {
 
     private var voiceWaveGeneration = 0
 
+    private fun resetVoiceRecording() {
+        voiceRecording = false
+        voiceZone = VoiceRecordZone.SEND
+        ++voiceWaveGeneration
+    }
+
     private fun handleVoiceLongPress(params: LongPressParams) {
         when (params.state) {
             "start" -> {
                 if (!voiceMode || voiceRecording) return
+                voiceFingerX = params.pageX
+                voiceFingerY = params.pageY
+                voiceZone = VoiceRecordZone.SEND
                 voiceModule.startListening { result ->
                     setTimeout(0) {
                         if (!result.success) {
@@ -465,7 +559,9 @@ internal class StockChatPage : Pager() {
                             return@setTimeout
                         }
                         voiceRecording = true
-                        voiceCancelArmed = false
+                        voiceZone = VoiceRecordZone.SEND
+                        voiceFingerX = params.pageX
+                        voiceFingerY = params.pageY
                         vm.banner = ""
                         startVoiceWave()
                         syncAccessoryBackHandler()
@@ -473,31 +569,62 @@ internal class StockChatPage : Pager() {
                 }
             }
             "move" -> if (voiceRecording) {
-                voiceCancelArmed = params.pageY < pagerData.pageViewHeight - 260f
+                voiceFingerX = params.pageX
+                voiceFingerY = params.pageY
+                voiceZone = voiceRecordZone(
+                    params.pageX,
+                    params.pageY,
+                    pagerData.pageViewWidth,
+                    pagerData.pageViewHeight,
+                    pagerData.safeAreaInsets.bottom,
+                )
             }
             "end" -> {
                 if (!voiceRecording) return
-                val canceled = params.isCancel || voiceCancelArmed
-                voiceRecording = false
-                voiceCancelArmed = false
-                ++voiceWaveGeneration
+                val zone = if (params.isCancel) VoiceRecordZone.CANCEL else voiceZone
+                resetVoiceRecording()
                 syncAccessoryBackHandler()
-                if (canceled) {
-                    voiceModule.cancelListening()
-                    vm.banner = "已取消语音输入"
-                } else {
-                    vm.banner = "正在识别语音…"
-                    voiceModule.finishListening { result ->
-                        setTimeout(0) {
-                            val text = result.text
-                            if (!text.isNullOrBlank()) {
-                                vm.banner = ""
-                                send(text)
-                            } else {
-                                vm.banner = result.error ?: "未识别到有效语音"
-                            }
-                        }
+                when (zone) {
+                    VoiceRecordZone.CANCEL -> {
+                        voiceModule.cancelListening()
+                        vm.banner = "已取消语音输入"
                     }
+                    VoiceRecordZone.EDIT -> finishVoiceToComposer()
+                    VoiceRecordZone.SEND -> finishVoiceToSend()
+                }
+            }
+        }
+    }
+
+    private fun finishVoiceToSend() {
+        vm.banner = "正在识别语音…"
+        voiceModule.finishListening { result ->
+            setTimeout(0) {
+                val text = result.text
+                if (!text.isNullOrBlank()) {
+                    vm.banner = ""
+                    send(text)
+                } else {
+                    vm.banner = result.error ?: "未识别到有效语音"
+                }
+            }
+        }
+    }
+
+    private fun finishVoiceToComposer() {
+        vm.banner = "正在识别语音…"
+        voiceModule.finishListening { result ->
+            setTimeout(0) {
+                val text = result.text
+                if (!text.isNullOrBlank()) {
+                    vm.banner = ""
+                    voiceMode = false
+                    vm.inputText = text
+                    inputRef?.view?.setText(text)
+                    inputRef?.view?.focus()
+                    syncAccessoryBackHandler()
+                } else {
+                    vm.banner = result.error ?: "未识别到有效语音"
                 }
             }
         }
@@ -507,10 +634,10 @@ internal class StockChatPage : Pager() {
         val generation = ++voiceWaveGeneration
         fun tick() {
             if (!voiceRecording || generation != voiceWaveGeneration) return
-            voiceWavePhase = (voiceWavePhase + 1) % 120
-            setTimeout(90) { tick() }
+            voiceWavePhase = (voiceWavePhase + 1) % 360
+            setTimeout(48) { tick() }
         }
-        setTimeout(90) { tick() }
+        setTimeout(48) { tick() }
     }
 
     private fun syncAccessoryBackHandler() {
@@ -600,11 +727,28 @@ internal class StockChatPage : Pager() {
         }
     }
 
+    override fun pageDidAppear() {
+        super.pageDidAppear()
+        if (::vm.isInitialized) {
+            vm.loadSettings()
+            vm.reloadConversationsFromStore()
+        }
+    }
+
+    private fun openSettings() {
+        closeDrawer()
+        acquireModule<RouterModule>(RouterModule.MODULE_NAME).openPage("StockChatSettings")
+    }
+
     private fun openDetail(instrumentKey: String) {
         dismissKeyboard()
+        val instrument = InstrumentCache.get(instrumentKey)
         acquireModule<RouterModule>(RouterModule.MODULE_NAME).openPage(
             "StockDetail",
-            JSONObject().apply { put("instrumentKey", instrumentKey) },
+            JSONObject().apply {
+                put("instrumentKey", instrumentKey)
+                instrument?.let { put("instrument", InstrumentCodec.encode(it)) }
+            },
         )
     }
 

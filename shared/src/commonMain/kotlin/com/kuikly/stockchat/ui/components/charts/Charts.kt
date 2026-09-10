@@ -10,6 +10,7 @@ import com.tencent.kuikly.core.base.ViewContainer
 import com.tencent.kuikly.core.views.Canvas
 import com.tencent.kuikly.core.views.CanvasContext
 import com.tencent.kuikly.core.views.TextAlign
+import kotlin.math.PI
 import kotlin.math.max
 import kotlin.math.min
 
@@ -63,6 +64,39 @@ fun ViewContainer<*, *>.CandleChart(
     }
 }
 
+/**
+ * 柱状图：支持正负值，涨跌着色。
+ */
+fun ViewContainer<*, *>.BarChart(
+    entries: List<com.kuikly.stockchat.domain.chat.BarEntry>,
+    width: Float,
+    height: Float,
+    unit: String = "",
+) {
+    Canvas({
+        attr { size(width, height) }
+    }) { ctx, w, h ->
+        ChartPainter.bar(ctx, entries, w, h, unit)
+    }
+}
+
+/**
+ * 仪表盘：半圆弧 + 中心数值 + 标签。
+ */
+fun ViewContainer<*, *>.GaugeChart(
+    value: Float,
+    max: Float,
+    width: Float,
+    height: Float,
+    label: String,
+) {
+    Canvas({
+        attr { size(width, height) }
+    }) { ctx, w, h ->
+        ChartPainter.gauge(ctx, value, max, w, h, label)
+    }
+}
+
 object ChartPainter {
 
     private val axisText = Color(0xFF9CA3AFL)
@@ -70,6 +104,116 @@ object ChartPainter {
     private val ma5Color = Color(0xFFF59E0BL)
     private val ma10Color = Color(0xFF334155L)
     private val ma20Color = Color(0xFF7C3AEDL)
+
+    fun bar(
+        ctx: CanvasContext,
+        entries: List<com.kuikly.stockchat.domain.chat.BarEntry>,
+        w: Float,
+        h: Float,
+        unit: String = "",
+    ) {
+        if (entries.isEmpty()) return
+        val rightPad = 44f
+        val topPad = 4f
+        val bottomPad = 24f
+        val plotW = w - rightPad
+        val plotH = h - topPad - bottomPad
+
+        val maxAbs = entries.maxOf { kotlin.math.abs(it.value) }.let { if (it <= 0) 1.0 else it } * 1.1
+        val zeroY = topPad + (plotH * 0.5f).toFloat()
+        val slot = plotW / entries.size
+        val barW = max(2f, slot * 0.56f)
+
+        // 网格 + 刻度
+        ctx.lineWidth(0.8f)
+        ctx.strokeStyle(gridLine)
+        ctx.font(10f, "")
+        ctx.textAlign(TextAlign.LEFT)
+        for (i in 0..4) {
+            val y = topPad + plotH * i / 4
+            ctx.beginPath(); ctx.moveTo(0f, y); ctx.lineTo(plotW, y); ctx.stroke()
+            val valAtY = maxAbs * (1 - 2.0 * i / 4)
+            ctx.fillStyle(axisText)
+            ctx.fillText(NumberFormat.compact(valAtY), plotW + 4f, y + (if (i == 0) 10f else if (i == 4) -2f else 4f))
+        }
+
+        // 零轴加粗
+        ctx.strokeStyle(Color(0xFFCCD2DEL))
+        ctx.lineWidth(1f)
+        ctx.beginPath(); ctx.moveTo(0f, zeroY); ctx.lineTo(plotW, zeroY); ctx.stroke()
+
+        // 柱体
+        entries.forEachIndexed { i, entry ->
+            val color = when (entry.color) {
+                com.kuikly.stockchat.domain.chat.BarColor.UP -> AppTheme.up
+                com.kuikly.stockchat.domain.chat.BarColor.DOWN -> AppTheme.down
+                com.kuikly.stockchat.domain.chat.BarColor.NEUTRAL -> AppTheme.accent
+            }
+            val x = slot * i + slot / 2 - barW / 2
+            val barH = (kotlin.math.abs(entry.value) / maxAbs * plotH / 2).toFloat()
+            ctx.fillStyle(color)
+            if (entry.value >= 0) {
+                fillRect(ctx, x, zeroY - barH, barW, barH)
+            } else {
+                fillRect(ctx, x, zeroY, barW, barH)
+            }
+        }
+
+        // X 轴标签
+        ctx.fillStyle(axisText)
+        ctx.textAlign(TextAlign.CENTER)
+        entries.forEachIndexed { i, entry ->
+            val x = slot * i + slot / 2
+            ctx.fillText(entry.label, x, h - 8f)
+        }
+    }
+
+    fun gauge(
+        ctx: CanvasContext,
+        value: Float,
+        max: Float,
+        w: Float,
+        h: Float,
+        label: String,
+    ) {
+        val pct = (value / max).coerceIn(0f, 1f)
+        val cx = w / 2
+        val cy = h * 0.72f
+        val radius = min(w, h) * 0.36f
+        val startAngle = (PI).toFloat()
+        val endAngle = (2 * PI).toFloat()
+
+        // 背景弧
+        ctx.strokeStyle(AppTheme.surfaceMuted)
+        ctx.lineWidth(radius * 0.28f)
+        ctx.lineCapRound()
+        ctx.beginPath()
+        ctx.arc(cx, cy, radius, startAngle, endAngle, false)
+        ctx.stroke()
+
+        // 值弧
+        val valEnd = startAngle + pct * (endAngle - startAngle)
+        val arcColor = when {
+            pct >= 0.65f -> AppTheme.up
+            pct <= 0.35f -> AppTheme.down
+            else -> AppTheme.warning
+        }
+        ctx.strokeStyle(arcColor)
+        ctx.beginPath()
+        ctx.arc(cx, cy, radius, startAngle, valEnd, false)
+        ctx.stroke()
+
+        // 中心数值
+        ctx.fillStyle(AppTheme.textPrimary)
+        ctx.font(28f, "bold")
+        ctx.textAlign(TextAlign.CENTER)
+        ctx.fillText(NumberFormat.fixed(value.toDouble(), 0), cx, cy - 2f)
+
+        // 标签
+        ctx.fillStyle(axisText)
+        ctx.font(11f, "")
+        ctx.fillText(label, cx, cy + 16f)
+    }
 
     fun sparkline(ctx: CanvasContext, values: List<Double>, w: Float, h: Float, color: Color, fill: Color) {
         if (values.size < 2) return

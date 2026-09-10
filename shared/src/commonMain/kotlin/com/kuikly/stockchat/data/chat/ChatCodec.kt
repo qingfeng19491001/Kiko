@@ -4,14 +4,26 @@ import com.kuikly.stockchat.domain.analysis.InsightTag
 import com.kuikly.stockchat.domain.analysis.TagTone
 import com.kuikly.stockchat.domain.analysis.TechnicalAnalysis
 import com.kuikly.stockchat.domain.analysis.TrendBias
+import com.kuikly.stockchat.domain.attachment.Attachment
+import com.kuikly.stockchat.domain.attachment.AttachmentKind
+import com.kuikly.stockchat.domain.attachment.AttachmentSource
+import com.kuikly.stockchat.domain.attachment.AttachmentStatus
 import com.kuikly.stockchat.domain.chat.AnswerBlock
+import com.kuikly.stockchat.domain.chat.BarColor
+import com.kuikly.stockchat.domain.chat.BarEntry
+import com.kuikly.stockchat.domain.chat.CapitalFlow
 import com.kuikly.stockchat.domain.chat.ChatMessage
 import com.kuikly.stockchat.domain.chat.CompareRow
 import com.kuikly.stockchat.domain.chat.Conversation
 import com.kuikly.stockchat.domain.chat.Intent
+import com.kuikly.stockchat.domain.chat.KeyLevel
+import com.kuikly.stockchat.domain.chat.LadderLevel
+import com.kuikly.stockchat.domain.chat.LadderStock
 import com.kuikly.stockchat.domain.chat.MessageStatus
 import com.kuikly.stockchat.domain.chat.Metric
 import com.kuikly.stockchat.domain.chat.Role
+import com.kuikly.stockchat.domain.model.InstrumentCache
+import com.kuikly.stockchat.domain.model.InstrumentCodec
 import com.kuikly.stockchat.domain.model.KLineBar
 import com.kuikly.stockchat.domain.model.Quote
 import com.kuikly.stockchat.domain.model.StockCatalog
@@ -59,6 +71,7 @@ object ChatCodec {
         put("intent", message.intent.name)
         put("createdAt", message.createdAt)
         put("error", message.errorMessage)
+        put("attachments", JSONArray().apply { message.attachments.forEach { put(encode(it)) } })
         put("blocks", JSONArray().apply { message.blocks.forEach { put(encode(it)) } })
     }
 
@@ -69,6 +82,9 @@ object ChatCodec {
             (0 until array.length()).mapNotNull { array.optJSONObject(it)?.let(::decodeBlock) }
         } ?: emptyList()
         val status = enumOrNull<MessageStatus>(json.optString("status")) ?: MessageStatus.DONE
+        val attachments = json.optJSONArray("attachments")?.let { array ->
+            (0 until array.length()).mapNotNull { array.optJSONObject(it)?.let(::decodeAttachment) }
+        } ?: emptyList()
         return ChatMessage(
             id = id,
             role = role,
@@ -78,6 +94,38 @@ object ChatCodec {
             status = if (status == MessageStatus.STREAMING || status == MessageStatus.THINKING) MessageStatus.DONE else status,
             intent = enumOrNull<Intent>(json.optString("intent")) ?: Intent.UNKNOWN,
             createdAt = json.optLong("createdAt"),
+            errorMessage = json.optString("error"),
+            attachments = attachments,
+        )
+    }
+
+    private fun encode(attachment: Attachment): JSONObject = JSONObject().apply {
+        put("id", attachment.id)
+        put("displayName", attachment.displayName)
+        put("mimeType", attachment.mimeType)
+        put("byteSize", attachment.byteSize)
+        put("localPath", attachment.localPath)
+        attachment.thumbnailPath?.let { put("thumbnailPath", it) }
+        put("source", attachment.source.name)
+        put("kind", attachment.kind.name)
+        put("status", attachment.status.name)
+        put("error", attachment.errorMessage)
+    }
+
+    private fun decodeAttachment(json: JSONObject): Attachment? {
+        val id = json.optString("id").ifEmpty { return null }
+        val source = enumOrNull<AttachmentSource>(json.optString("source")) ?: return null
+        val kind = enumOrNull<AttachmentKind>(json.optString("kind")) ?: return null
+        return Attachment(
+            id = id,
+            displayName = json.optString("displayName"),
+            mimeType = json.optString("mimeType"),
+            byteSize = json.optLong("byteSize"),
+            localPath = json.optString("localPath"),
+            thumbnailPath = json.optString("thumbnailPath").ifEmpty { null },
+            source = source,
+            kind = kind,
+            status = enumOrNull<AttachmentStatus>(json.optString("status")) ?: AttachmentStatus.READY,
             errorMessage = json.optString("error"),
         )
     }
@@ -140,6 +188,90 @@ object ChatCodec {
                 put("type", "followups")
                 put("items", JSONArray().apply { block.items.forEach { put(it) } })
             }
+            is AnswerBlock.SectionHeader -> {
+                put("type", "section")
+                put("index", block.index)
+                put("title", block.title)
+                put("subtitle", block.subtitle)
+            }
+            is AnswerBlock.SummaryCallout -> {
+                put("type", "callout")
+                put("text", block.text)
+            }
+            is AnswerBlock.BarChartCard -> {
+                put("type", "barchart")
+                put("title", block.title)
+                put("subtitle", block.subtitle)
+                put("unit", block.unit)
+                put("bars", JSONArray().apply {
+                    block.bars.forEach {
+                        put(JSONObject().apply {
+                            put("label", it.label); put("value", it.value); put("color", it.color.name)
+                        })
+                    }
+                })
+            }
+            is AnswerBlock.KeyLevelsCard -> {
+                put("type", "keylevels")
+                put("title", block.title)
+                put("levels", JSONArray().apply {
+                    block.levels.forEach {
+                        put(JSONObject().apply {
+                            put("label", it.label); put("value", it.value); put("note", it.note); put("tone", it.tone.name)
+                        })
+                    }
+                })
+            }
+            is AnswerBlock.GaugeCard -> {
+                put("type", "gauge")
+                put("title", block.title)
+                put("value", block.value.toDouble())
+                put("max", block.max.toDouble())
+                put("label", block.label)
+                put("description", block.description)
+            }
+            is AnswerBlock.MarketBreadthCard -> {
+                put("type", "breadth")
+                put("title", block.title)
+                put("advancing", block.advancing)
+                put("declining", block.declining)
+                put("limitUp", block.limitUp)
+                put("limitDown", block.limitDown)
+                put("halted", block.halted)
+                put("limitUpRate", block.limitUpRate)
+            }
+            is AnswerBlock.LimitUpLadderCard -> {
+                put("type", "ladder")
+                put("title", block.title)
+                put("maxLevel", block.maxLevel)
+                put("levels", JSONArray().apply {
+                    block.levels.forEach { level ->
+                        put(JSONObject().apply {
+                            put("level", level.level)
+                            put("stocks", JSONArray().apply {
+                                level.stocks.forEach {
+                                    put(JSONObject().apply {
+                                        put("name", it.name); put("code", it.code)
+                                        put("changePct", it.changePct); put("marketCap", it.marketCap)
+                                    })
+                                }
+                            })
+                        })
+                    }
+                })
+            }
+            is AnswerBlock.CapitalFlowCard -> {
+                put("type", "capflow")
+                put("title", block.title)
+                put("flows", JSONArray().apply {
+                    block.flows.forEach {
+                        put(JSONObject().apply {
+                            put("label", it.label); put("netInflow", it.netInflow)
+                            put("pct", it.pct); put("tone", it.tone.name)
+                        })
+                    }
+                })
+            }
         }
     }
 
@@ -187,6 +319,89 @@ object ChatCodec {
         "followups" -> AnswerBlock.FollowUps(
             json.optJSONArray("items")?.let { arr -> (0 until arr.length()).mapNotNull { arr.optString(it) } } ?: emptyList(),
         )
+        "section" -> AnswerBlock.SectionHeader(
+            index = json.optInt("index"),
+            title = json.optString("title"),
+            subtitle = json.optString("subtitle"),
+        )
+        "callout" -> AnswerBlock.SummaryCallout(json.optString("text"))
+        "barchart" -> AnswerBlock.BarChartCard(
+            title = json.optString("title"),
+            subtitle = json.optString("subtitle"),
+            unit = json.optString("unit"),
+            bars = json.optJSONArray("bars")?.let { arr ->
+                (0 until arr.length()).mapNotNull { i ->
+                    arr.optJSONObject(i)?.let {
+                        BarEntry(
+                            it.optString("label"), it.optDouble("value"),
+                            enumOrNull<BarColor>(it.optString("color")) ?: BarColor.NEUTRAL,
+                        )
+                    }
+                }
+            } ?: emptyList(),
+        )
+        "keylevels" -> AnswerBlock.KeyLevelsCard(
+            title = json.optString("title"),
+            levels = json.optJSONArray("levels")?.let { arr ->
+                (0 until arr.length()).mapNotNull { i ->
+                    arr.optJSONObject(i)?.let {
+                        KeyLevel(
+                            it.optString("label"), it.optString("value"), it.optString("note"),
+                            enumOrNull<TagTone>(it.optString("tone")) ?: TagTone.NEUTRAL,
+                        )
+                    }
+                }
+            } ?: emptyList(),
+        )
+        "gauge" -> AnswerBlock.GaugeCard(
+            title = json.optString("title"),
+            value = json.optDouble("value").toFloat(),
+            max = json.optDouble("max", 100.0).toFloat(),
+            label = json.optString("label"),
+            description = json.optString("description"),
+        )
+        "breadth" -> AnswerBlock.MarketBreadthCard(
+            title = json.optString("title"),
+            advancing = json.optInt("advancing"),
+            declining = json.optInt("declining"),
+            limitUp = json.optInt("limitUp"),
+            limitDown = json.optInt("limitDown"),
+            halted = json.optInt("halted"),
+            limitUpRate = json.optString("limitUpRate"),
+        )
+        "ladder" -> AnswerBlock.LimitUpLadderCard(
+            title = json.optString("title"),
+            maxLevel = json.optInt("maxLevel"),
+            levels = json.optJSONArray("levels")?.let { arr ->
+                (0 until arr.length()).mapNotNull { i ->
+                    arr.optJSONObject(i)?.let { level ->
+                        LadderLevel(
+                            level = level.optInt("level"),
+                            stocks = level.optJSONArray("stocks")?.let { stocks ->
+                                (0 until stocks.length()).mapNotNull { j ->
+                                    stocks.optJSONObject(j)?.let {
+                                        LadderStock(it.optString("name"), it.optString("code"), it.optString("changePct"), it.optString("marketCap"))
+                                    }
+                                }
+                            } ?: emptyList(),
+                        )
+                    }
+                }
+            } ?: emptyList(),
+        )
+        "capflow" -> AnswerBlock.CapitalFlowCard(
+            title = json.optString("title"),
+            flows = json.optJSONArray("flows")?.let { arr ->
+                (0 until arr.length()).mapNotNull { i ->
+                    arr.optJSONObject(i)?.let {
+                        CapitalFlow(
+                            it.optString("label"), it.optString("netInflow"), it.optString("pct"),
+                            enumOrNull<TagTone>(it.optString("tone")) ?: TagTone.NEUTRAL,
+                        )
+                    }
+                }
+            } ?: emptyList(),
+        )
         else -> null
     }
 
@@ -196,6 +411,7 @@ object ChatCodec {
 
     fun encode(quote: Quote): JSONObject = JSONObject().apply {
         put("key", quote.instrument.key)
+        put("instrument", InstrumentCodec.encode(quote.instrument))
         put("price", quote.price); put("prevClose", quote.prevClose); put("open", quote.open)
         put("high", quote.high); put("low", quote.low); put("change", quote.change); put("changePct", quote.changePct)
         put("volume", quote.volume); put("turnover", quote.turnover)
@@ -207,7 +423,11 @@ object ChatCodec {
     }
 
     fun decodeQuote(json: JSONObject): Quote? {
-        val instrument = StockCatalog.findByKey(json.optString("key")) ?: return null
+        val instrument = InstrumentCodec.decode(json.optJSONObject("instrument"))
+            ?: InstrumentCache.get(json.optString("key"))
+            ?: StockCatalog.findByKey(json.optString("key"))
+            ?: return null
+        InstrumentCache.put(instrument)
         fun opt(name: String): Double? = if (json.has(name)) json.optDouble(name) else null
         return Quote(
             instrument = instrument,

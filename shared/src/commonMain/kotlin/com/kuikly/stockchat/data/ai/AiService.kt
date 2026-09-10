@@ -1,13 +1,21 @@
 package com.kuikly.stockchat.data.ai
 
+import com.kuikly.stockchat.data.attachment.AttachmentLoader
+import com.kuikly.stockchat.data.attachment.FileContentReader
+import com.kuikly.stockchat.data.attachment.LoadedAttachment
+import com.kuikly.stockchat.data.market.DerivedMarketRepository
 import com.kuikly.stockchat.data.market.MarketRepository
+import com.kuikly.stockchat.domain.attachment.Attachment
 import com.kuikly.stockchat.domain.chat.AiAnswer
 import com.kuikly.stockchat.domain.chat.AnswerBlock
 import com.kuikly.stockchat.domain.chat.AnswerComposer
 import com.kuikly.stockchat.domain.chat.Intent
 import com.kuikly.stockchat.domain.chat.IntentParser
 import com.kuikly.stockchat.domain.chat.ParsedIntent
+import com.kuikly.stockchat.domain.model.DerivedMarketData
 import com.kuikly.stockchat.domain.model.Instrument
+import com.kuikly.stockchat.domain.model.InstrumentCache
+import com.kuikly.stockchat.domain.model.InstrumentResolver
 import com.kuikly.stockchat.domain.model.MarketSnapshot
 import com.tencent.kuikly.core.timer.setTimeout
 
@@ -37,12 +45,24 @@ interface AnswerListener {
  * 默认为本地规则引擎，可替换为远端大模型。
  */
 interface AiEngine {
-    fun generate(parsed: ParsedIntent, snapshots: List<MarketSnapshot>, callback: (AiAnswer) -> Unit)
+    fun generate(
+        parsed: ParsedIntent,
+        snapshots: List<MarketSnapshot>,
+        derived: DerivedMarketData,
+        attachments: List<LoadedAttachment>,
+        callback: (AiAnswer) -> Unit,
+    )
 }
 
 class LocalAiEngine : AiEngine {
-    override fun generate(parsed: ParsedIntent, snapshots: List<MarketSnapshot>, callback: (AiAnswer) -> Unit) {
-        callback(AnswerComposer.compose(parsed, snapshots))
+    override fun generate(
+        parsed: ParsedIntent,
+        snapshots: List<MarketSnapshot>,
+        derived: DerivedMarketData,
+        attachments: List<LoadedAttachment>,
+        callback: (AiAnswer) -> Unit,
+    ) {
+        callback(AnswerComposer.compose(parsed, snapshots, derived))
     }
 }
 
@@ -53,6 +73,10 @@ class AiService(
     private val pagerId: String,
     private val marketRepository: MarketRepository,
     private val engine: AiEngine = LocalAiEngine(),
+    private val derivedRepository: DerivedMarketRepository? = null,
+    private val intentRecognizer: RemoteIntentRecognizer? = null,
+    private val fileReader: FileContentReader? = null,
+    private val instrumentResolver: InstrumentResolver = InstrumentResolver(),
 ) {
     /** 每个 tick 输出的字符数 */
     var charsPerTick: Int = 4
@@ -67,27 +91,73 @@ class AiService(
         generation += 1
     }
 
-    fun ask(text: String, contextInstruments: List<Instrument>, listener: AnswerListener) {
+    fun ask(
+        text: String,
+        contextInstruments: List<Instrument>,
+        listener: AnswerListener,
+        attachments: List<Attachment> = emptyList(),
+    ) {
         val myGeneration = ++generation
-        val parsed = IntentParser.parse(text, contextInstruments)
-        listener.onThinking(parsed)
+        recognize(text, contextInstruments) { parsed ->
+            if (myGeneration != generation) return@recognize
+            listener.onThinking(parsed)
+            AttachmentLoader.loadAll(attachments, fileReader) { loaded ->
+                if (myGeneration != generation) return@loadAll
+                instrumentResolver.enrich(parsed) { resolved ->
+                    if (myGeneration != generation) return@enrich
+                    InstrumentCache.rememberAll(resolved.instruments)
+                    if (resolved.instruments != parsed.instruments) listener.onThinking(resolved)
+                    continueAsk(resolved, loaded, myGeneration, listener)
+                }
+            }
+        }
+    }
 
+    private fun recognize(text: String, context: List<Instrument>, callback: (ParsedIntent) -> Unit) {
+        val recognizer = intentRecognizer
+        if (recognizer == null) callback(IntentParser.parse(text, context))
+        else recognizer.recognize(text, context, callback)
+    }
+
+    private fun continueAsk(
+        parsed: ParsedIntent,
+        loaded: List<LoadedAttachment>,
+        myGeneration: Int,
+        listener: AnswerListener,
+    ) {
         val needed = when (parsed.intent) {
-            Intent.KNOWLEDGE, Intent.GREETING, Intent.UNKNOWN -> emptyList()
+            Intent.KNOWLEDGE, Intent.GREETING, Intent.LIMIT_UP_LADDER -> emptyList()
+            Intent.UNKNOWN -> parsed.instruments.take(1)
             Intent.COMPARE -> parsed.instruments.take(2)
             else -> parsed.instruments.take(1)
         }
-        // 兜底：风险意图但没有标的时也不请求
-        marketRepository.loadSnapshots(needed) { snapshots ->
-            if (myGeneration != generation) return@loadSnapshots
-            engine.generate(parsed, snapshots) { answer ->
-                if (myGeneration != generation) return@generate
-                // 让“思考中”至少可见片刻，体验更自然
-                setTimeout(pagerId, 350) {
-                    if (myGeneration != generation) return@setTimeout
-                    streamBlocks(answer, 0, myGeneration, listener)
+        loadDerived(parsed) { derived ->
+            if (myGeneration != generation) return@loadDerived
+            marketRepository.loadSnapshots(needed) { snapshots ->
+                if (myGeneration != generation) return@loadSnapshots
+                engine.generate(parsed, snapshots, derived, loaded) { answer ->
+                    if (myGeneration != generation) return@generate
+                    setTimeout(pagerId, 350) {
+                        if (myGeneration != generation) return@setTimeout
+                        streamBlocks(answer, 0, myGeneration, listener)
+                    }
                 }
             }
+        }
+    }
+
+    /** 按意图加载衍生数据（市场广度 / 连板梯队 / 资金流向）；网关未启动时全部为空，不影响主流程 */
+    private fun loadDerived(parsed: ParsedIntent, callback: (DerivedMarketData) -> Unit) {
+        val repo = derivedRepository ?: run { callback(DerivedMarketData()); return }
+        when (parsed.intent) {
+            Intent.MARKET_OVERVIEW -> repo.loadBreadth { b -> callback(DerivedMarketData(breadth = b)) }
+            Intent.LIMIT_UP_LADDER -> repo.loadLadder { l -> callback(DerivedMarketData(ladder = l)) }
+            Intent.CAPITAL_FLOW -> {
+                val ins = parsed.instruments.firstOrNull()
+                if (ins == null) callback(DerivedMarketData())
+                else repo.loadCapitalFlow(ins) { f -> callback(DerivedMarketData(flow = f)) }
+            }
+            else -> callback(DerivedMarketData())
         }
     }
 

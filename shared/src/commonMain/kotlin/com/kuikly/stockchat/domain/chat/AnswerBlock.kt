@@ -52,7 +52,99 @@ sealed class AnswerBlock {
 
     /** 追问建议 */
     data class FollowUps(val items: List<String>) : AnswerBlock()
+
+    /** 章节标题（序号徽标 + 标题 + 可选副标题） */
+    data class SectionHeader(
+        val index: Int,
+        val title: String,
+        val subtitle: String = "",
+    ) : AnswerBlock()
+
+    /** 核心结论高亮区（左侧色条 + 引言文本） */
+    data class SummaryCallout(val text: String) : AnswerBlock()
+
+    /** 柱状图卡片 */
+    data class BarChartCard(
+        val title: String,
+        val subtitle: String = "",
+        val bars: List<BarEntry>,
+        val unit: String = "",
+    ) : AnswerBlock()
+
+    /** 关键价位表 */
+    data class KeyLevelsCard(
+        val title: String,
+        val levels: List<KeyLevel>,
+    ) : AnswerBlock()
+
+    /** 仪表盘卡片（情绪指数 / 技术评分 / 估值分位） */
+    data class GaugeCard(
+        val title: String,
+        val value: Float,
+        /** 0..100 */
+        val max: Float = 100f,
+        val label: String,
+        val description: String = "",
+    ) : AnswerBlock()
+
+    /** 市场广度卡片 */
+    data class MarketBreadthCard(
+        val title: String,
+        val advancing: Int,
+        val declining: Int,
+        val limitUp: Int,
+        val limitDown: Int,
+        val halted: Int,
+        val limitUpRate: String,
+    ) : AnswerBlock()
+
+    /** 连板梯队卡片 */
+    data class LimitUpLadderCard(
+        val title: String,
+        val maxLevel: Int,
+        val levels: List<LadderLevel>,
+    ) : AnswerBlock()
+
+    /** 资金流向卡片 */
+    data class CapitalFlowCard(
+        val title: String,
+        val flows: List<CapitalFlow>,
+    ) : AnswerBlock()
 }
+
+data class BarEntry(
+    val label: String,
+    val value: Double,
+    val color: BarColor = BarColor.NEUTRAL,
+)
+
+enum class BarColor { UP, DOWN, NEUTRAL }
+
+data class KeyLevel(
+    val label: String,
+    val value: String,
+    val note: String,
+    val tone: TagTone = TagTone.NEUTRAL,
+)
+
+data class LadderLevel(
+    val level: Int,
+    val stocks: List<LadderStock>,
+)
+
+data class LadderStock(
+    val name: String,
+    val code: String,
+    val changePct: String,
+    val marketCap: String,
+)
+
+data class CapitalFlow(
+    val label: String,
+    val netInflow: String,
+    val pct: String,
+    val tone: TagTone,
+)
 
 data class CompareRow(
     val label: String,

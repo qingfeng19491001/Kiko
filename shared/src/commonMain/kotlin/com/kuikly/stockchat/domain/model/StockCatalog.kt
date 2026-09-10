@@ -100,6 +100,19 @@ object StockCatalog {
     fun findByDisplayCode(displayCode: String): Instrument? =
         all.firstOrNull { it.displayCode.equals(displayCode, ignoreCase = true) }
 
+    /** 按名称 / 代码 / 别名解析标的（意图识别回包用）。 */
+    fun resolveName(name: String): Instrument? {
+        val key = name.trim()
+        if (key.isEmpty()) return null
+        val lower = key.lowercase()
+        return all.firstOrNull { it.name.equals(key, ignoreCase = true) }
+            ?: all.firstOrNull { it.displayCode.equals(key, ignoreCase = true) }
+            ?: all.firstOrNull { it.code.equals(key, ignoreCase = true) }
+            ?: all.firstOrNull { instrument -> instrument.aliases.any { it.equals(key, ignoreCase = true) } }
+            ?: extract(key).firstOrNull()
+            ?: all.firstOrNull { it.name.lowercase().contains(lower) || lower.contains(it.name.lowercase()) }
+    }
+
     /**
      * 在文本中抽取标的，按出现顺序返回（去重）。
      * 匹配优先级：全名 > 代码 > 别名，避免“腾讯控股”同时命中“腾讯”。

@@ -16,7 +16,11 @@ actual fun ViewContainer<*, *>.PlatformKLineChart(
     themeName: String,
     barsJson: String,
     configJson: String,
+    priceStyleName: String,
+    touchEnabled: Boolean,
     onError: (code: String, message: String) -> Unit,
+    onPaneLayoutChange: (priceTop: Float, firstTop: Float, secondTop: Float) -> Unit,
+    onPaneHeaderClick: (paneId: String) -> Unit,
 ) {
     KLineChart {
         attr {
@@ -25,9 +29,15 @@ actual fun ViewContainer<*, *>.PlatformKLineChart(
             period(periodValue, periodUnit)
             mode(modeName)
             theme(themeName)
+            priceStyle(priceStyleName)
             bars(barsJson)
             config(configJson)
+            touchEnable(touchEnabled)
         }
-        event { onError(onError) }
+        event {
+            onError(onError)
+            onPaneLayoutChange(onPaneLayoutChange)
+            onPaneHeaderClick(onPaneHeaderClick)
+        }
     }
 }

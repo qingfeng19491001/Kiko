@@ -2,6 +2,7 @@ package com.kuikly.stockchat.ui.chat
 
 import com.kuikly.stockchat.domain.chat.AnswerBlock
 import com.kuikly.stockchat.domain.chat.ChatMessage
+import com.kuikly.stockchat.domain.attachment.Attachment
 import com.kuikly.stockchat.domain.chat.Intent
 import com.kuikly.stockchat.domain.chat.MessageStatus
 import com.kuikly.stockchat.domain.chat.Role
@@ -28,7 +29,9 @@ class ChatUiMessage(
     val createdAt: Long,
     initialStatus: MessageStatus,
     initialIntent: Intent = Intent.UNKNOWN,
+    initialAttachments: List<Attachment> = emptyList(),
 ) {
+    var attachments: List<Attachment> = initialAttachments
     var status by observable(initialStatus)
     var intent by observable(initialIntent)
     var errorMessage by observable("")
@@ -76,13 +79,14 @@ class ChatUiMessage(
             intent = intent,
             createdAt = createdAt,
             errorMessage = errorMessage,
+            attachments = attachments,
         )
     }
 
     companion object {
         /** 从持久化消息恢复（Markdown 直接终态渲染） */
         fun fromDomain(message: ChatMessage): ChatUiMessage {
-            val ui = ChatUiMessage(message.id, message.role, message.text, message.createdAt, MessageStatus.DONE, message.intent)
+            val ui = ChatUiMessage(message.id, message.role, message.text, message.createdAt, MessageStatus.DONE, message.intent, message.attachments)
             ui.errorMessage = message.errorMessage
             message.blocks.forEachIndexed { index, block ->
                 if (block is AnswerBlock.Markdown) {

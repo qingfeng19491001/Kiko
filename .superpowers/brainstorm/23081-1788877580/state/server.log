@@ -1,0 +1,9 @@
+{"type":"server-started","port":65421,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:65421","screen_dir":"/Users/mac/Documents/Kuikly/kuikly-stock-chat/.superpowers/brainstorm/23081-1788877580/content","state_dir":"/Users/mac/Documents/Kuikly/kuikly-stock-chat/.superpowers/brainstorm/23081-1788877580/state"}
+{"type":"screen-added","file":"/Users/mac/Documents/Kuikly/kuikly-stock-chat/.superpowers/brainstorm/23081-1788877580/content/panel-layer-choice.html"}
+{"type":"screen-added","file":"/Users/mac/Documents/Kuikly/kuikly-stock-chat/.superpowers/brainstorm/23081-1788877580/content/waiting-scope.html"}
+{"type":"screen-added","file":"/Users/mac/Documents/Kuikly/kuikly-stock-chat/.superpowers/brainstorm/23081-1788877580/content/selected-attachment-layout.html"}
+{"source":"user-event","type":"click","text":"×\n          腾讯控股财报.pdf2.4 MB×\n        \n        针对附件提问…＋　↑\n      \n    \n    A · 输入框内上方附件条（推荐）图片缩略图与文件卡片并排，可横向扩展；附件、问题和发送动作的关系最清楚。","choice":"attachment-strip-above-input","id":null,"timestamp":1788878103556}
+{"source":"user-event","type":"click","text":"×\n          腾讯控股财报.pdf2.4 MB×\n        \n        针对附件提问…＋　↑\n      \n    \n    A · 输入框内上方附件条（推荐）图片缩略图与文件卡片并排，可横向扩展；附件、问题和发送动作的关系最清楚。","choice":"attachment-strip-above-input","id":null,"timestamp":1788878107648}
+{"source":"user-event","type":"click","text":"×\n          腾讯控股财报.pdf2.4 MB×\n        \n        针对附件提问…＋　↑\n      \n    \n    A · 输入框内上方附件条（推荐）图片缩略图与文件卡片并排，可横向扩展；附件、问题和发送动作的关系最清楚。","choice":"attachment-strip-above-input","id":null,"timestamp":1788878107792}
+{"type":"screen-added","file":"/Users/mac/Documents/Kuikly/kuikly-stock-chat/.superpowers/brainstorm/23081-1788877580/content/waiting-send-behavior.html"}
+{"type":"server-stopped","reason":"idle timeout"}

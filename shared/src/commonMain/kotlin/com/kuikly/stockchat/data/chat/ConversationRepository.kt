@@ -76,8 +76,26 @@ class ConversationRepository(private val store: KeyValueStore) {
         runCatching { store.set(KEY_CONVERSATIONS, array.toString()) }
     }
 
+    fun reloadFromStore(): List<Conversation> {
+        cache = null
+        return loadAll()
+    }
+
     companion object {
         private const val KEY_CONVERSATIONS = "stockchat.conversations.v1"
+    }
+}
+
+/** 应用偏好：语音播报等跨页面共享的开关。 */
+class SettingsRepository(private val store: KeyValueStore) {
+    fun isTtsEnabled(): Boolean = runCatching { store.get(KEY_TTS) }.getOrDefault("") == "1"
+
+    fun setTtsEnabled(enabled: Boolean) {
+        runCatching { store.set(KEY_TTS, if (enabled) "1" else "0") }
+    }
+
+    companion object {
+        private const val KEY_TTS = "stockchat.settings.tts"
     }
 }
 
