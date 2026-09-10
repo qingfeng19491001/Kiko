@@ -11,6 +11,7 @@ import com.kuikly.stockchat.ui.chat.AttachmentPanel
 import com.kuikly.stockchat.ui.chat.AssistantMessageView
 import com.kuikly.stockchat.ui.chat.ChatNavBar
 import com.kuikly.stockchat.ui.chat.ChatViewModel
+import com.kuikly.stockchat.ui.chat.ComposerCapsulesView
 import com.kuikly.stockchat.ui.chat.ComposerView
 import com.kuikly.stockchat.ui.chat.DrawerPhysics
 import com.kuikly.stockchat.ui.chat.DrawerMotion
@@ -253,6 +254,15 @@ internal class StockChatPage : Pager() {
                             View { attr { height(20f) } }
                         }
                     }
+                    ComposerCapsulesView(
+                        visible = {
+                            !ctx.composerFocused &&
+                                ctx.keyboardHeight == 0f &&
+                                !ctx.voiceMode &&
+                                !ctx.attachmentPanelVisible
+                        },
+                        onPrompt = { ctx.send(it) },
+                    )
                     ComposerView(
                         vm = ctx.vm,
                         expanded = { ctx.composerFocused },

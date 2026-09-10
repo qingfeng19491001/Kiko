@@ -59,6 +59,25 @@ class ChatViewModel(
     var hotSnapshots by observableList<MarketSnapshot>()
     var overviewLoading by observable(false)
 
+    /** 欢迎语当前页；点击「换一换」后自增并刷新 [welcomePrompts]。 */
+    var welcomePromptPage by observable(0)
+        private set
+    var welcomePrompts by observableList<QuickPrompt>()
+
+    init {
+        refreshWelcomePrompts()
+    }
+
+    fun shuffleWelcomePrompts() {
+        welcomePromptPage = PromptBank.nextPage(welcomePromptPage)
+        refreshWelcomePrompts()
+    }
+
+    private fun refreshWelcomePrompts() {
+        welcomePrompts.clear()
+        welcomePrompts.addAll(PromptBank.welcomePage(welcomePromptPage))
+    }
+
     fun loadHistory() {
         conversations.clear()
         conversations.addAll(conversationRepository.loadAll())

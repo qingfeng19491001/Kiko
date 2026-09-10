@@ -32,20 +32,9 @@ import com.tencent.kuikly.core.views.ActivityIndicator
 import com.tencent.kuikly.core.views.Image
 import com.tencent.kuikly.core.views.Input
 import com.tencent.kuikly.core.views.InputView
+import com.tencent.kuikly.core.views.Scroller
 import com.tencent.kuikly.core.views.Text
 import com.tencent.kuikly.core.views.View
-
-/** 首页推荐问题 */
-data class QuickPrompt(val category: String, val prompt: String)
-
-val quickPrompts: List<QuickPrompt> = listOf(
-    QuickPrompt("行情", "腾讯控股后市如何？"),
-    QuickPrompt("板块", "港股科技板块趋势分析"),
-    QuickPrompt("对比", "比亚迪 vs 特斯拉 对比"),
-    QuickPrompt("风险", "阿里巴巴有哪些风险"),
-    QuickPrompt("宏观", "美联储利率影响解读"),
-    QuickPrompt("知识", "什么是市盈率"),
-)
 
 // region 导航栏
 
@@ -130,7 +119,7 @@ fun ViewContainer<*, *>.WelcomeView(
             View {
                 attr {
                     val isCompact = compact()
-                    height(if (isCompact) 0f else 150f)
+                    height(if (isCompact) 0f else 86f)
                     alignItemsCenter()
                     overflow(true)
                     animation(Animation.easeOut(0.28f), isCompact)
@@ -150,41 +139,59 @@ fun ViewContainer<*, *>.WelcomeView(
                             color(AppTheme.textPrimary); marginTop(26f)
                         }
                     }
-                    View {
-                        attr {
-                            marginTop(22f); borderRadius(20f); backgroundColor(AppTheme.surfaceMuted)
-                            paddingLeft(18f); paddingRight(18f); paddingTop(10f); paddingBottom(10f)
-                        }
-                        event { click { onPrompt("腾讯控股后市如何？") } }
-                        Text { attr { text("开始行情分析"); fontSize(14f); color(Color(0xFF398BB5L)) } }
-                    }
                 }
             }
         }
         View {
             attr {
                 val isCompact = compact()
-                flexDirectionRow(); justifyContentSpaceBetween()
-                height(if (isCompact) 0f else 46f)
+                height(if (isCompact) 0f else 184f)
                 opacity(if (isCompact) 0f else 1f)
                 transform(Translate(0f, 0f, 0f, if (isCompact) 12f else 0f))
                 overflow(true)
                 animation(Animation.easeOut(0.22f), isCompact)
             }
-            listOf(
-                Triple(IconKind.CHART, "行情分析", "腾讯控股后市如何？"),
-                Triple(IconKind.COMPARE, "对比", "比亚迪 vs 特斯拉 对比"),
-                Triple(IconKind.ALERT, "风险", "阿里巴巴有哪些风险"),
-            ).forEach { (icon, title, prompt) ->
+            View {
+                attr {
+                    flexDirectionRow(); alignItemsCenter(); justifyContentSpaceBetween()
+                    height(32f); marginBottom(8f)
+                }
+                Text {
+                    attr {
+                        text("猜你想问")
+                        fontSize(13f); fontWeight600(); color(AppTheme.textSecondary)
+                    }
+                }
+                View {
+                    attr { flexDirectionRow(); alignItemsCenter(); paddingLeft(8f); paddingTop(4f); paddingBottom(4f) }
+                    event { click { vm.shuffleWelcomePrompts() } }
+                    Icon(IconKind.REFRESH, 14f, Color(0xFF398BB5L), 1.6f)
+                    Text {
+                        attr {
+                            text("换一换")
+                            fontSize(13f); color(Color(0xFF398BB5L)); marginLeft(4f)
+                        }
+                    }
+                }
+            }
+            vfor({ vm.welcomePrompts }) { item ->
                 View {
                     attr {
                         flexDirectionRow(); alignItemsCenter()
-                        backgroundColor(AppTheme.surfaceMuted); borderRadius(22f)
-                        paddingLeft(12f); paddingRight(12f); height(42f)
+                        height(40f); marginBottom(8f)
+                        backgroundColor(AppTheme.surfaceMuted); borderRadius(20f)
+                        paddingLeft(14f); paddingRight(12f)
                     }
-                    event { click { onPrompt(prompt) } }
-                    Icon(icon, 17f, AppTheme.textTertiary)
-                    Text { attr { text(title); fontSize(14f); color(AppTheme.textPrimary); marginLeft(6f) } }
+                    event { click { onPrompt(item.prompt) } }
+                    Icon(PromptBank.iconFor(item.category), 16f, AppTheme.textTertiary)
+                    Text {
+                        attr {
+                            text(item.prompt)
+                            fontSize(14f); color(AppTheme.textPrimary); marginLeft(8f)
+                            flex(1f); lines(1)
+                        }
+                    }
+                    Icon(IconKind.CHEVRON_RIGHT, 14f, AppTheme.textTertiary)
                 }
             }
         }
@@ -508,6 +515,58 @@ private fun thinkingText(intent: Intent): String = when (intent) {
 // endregion
 
 // region 输入框
+
+/** 输入框上方的提问胶囊，欢迎态与对话态均可点选发送。 */
+fun ViewContainer<*, *>.ComposerCapsulesView(
+    visible: () -> Boolean,
+    onPrompt: (String) -> Unit,
+) {
+    View {
+        attr {
+            val isVisible = visible()
+            height(if (isVisible) 44f else 0f)
+            opacity(if (isVisible) 1f else 0f)
+            overflow(true)
+            animation(Animation.easeOut(0.2f), isVisible)
+        }
+        Scroller {
+            attr {
+                flexDirectionRow()
+                height(36f)
+                marginTop(4f)
+                showScrollerIndicator(false)
+            }
+            View {
+                attr {
+                    flexDirectionRow()
+                    alignItemsCenter()
+                    height(36f)
+                    paddingLeft(16f)
+                    paddingRight(8f)
+                }
+                PromptBank.composerCapsules.forEach { item ->
+                    View {
+                        attr {
+                            flexDirectionRow(); alignItemsCenter()
+                            height(36f); marginRight(8f)
+                            backgroundColor(AppTheme.surfaceMuted); borderRadius(18f)
+                            paddingLeft(12f); paddingRight(12f)
+                        }
+                        event { click { onPrompt(item.prompt) } }
+                        Text {
+                            attr {
+                                text(item.capsule)
+                                fontSize(13f)
+                                color(AppTheme.textPrimary)
+                                lines(1)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 fun ViewContainer<*, *>.ComposerView(
     vm: ChatViewModel,
