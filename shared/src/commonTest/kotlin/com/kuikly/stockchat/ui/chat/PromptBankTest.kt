@@ -38,12 +38,21 @@ class PromptBankTest {
 
     @Test
     fun composerCapsulesStayShortAndSendable() {
-        assertTrue(PromptBank.composerCapsules.size >= 6)
+        assertTrue(PromptBank.composerCapsules.size >= 16)
         PromptBank.composerCapsules.forEach { item ->
             assertTrue(item.prompt.isNotBlank())
             assertTrue(item.capsule.isNotBlank())
             assertTrue(item.capsule.length <= item.prompt.length)
         }
         assertEquals(PromptBank.composerCapsules.size, PromptBank.composerCapsules.map { it.capsule }.toSet().size)
+    }
+
+    @Test
+    fun capsuleShuffleShowsADifferentPage() {
+        val first = PromptBank.capsulePage(0).map { it.capsule }
+        val second = PromptBank.capsulePage(1).map { it.capsule }
+        assertEquals(PromptBank.CAPSULE_PAGE_SIZE, first.size)
+        assertEquals(PromptBank.CAPSULE_PAGE_SIZE, second.size)
+        assertTrue(first.intersect(second.toSet()).isEmpty())
     }
 }

@@ -71,6 +71,7 @@ internal class StockChatPage : Pager() {
     private var voiceRecording by observable(false)
     private var voiceCancelArmed by observable(false)
     private var voiceWavePhase by observable(0)
+    private var promptPage by observable(0)
     private var listRef: ViewRef<ListView<*, *>>? = null
     private var inputRef: ViewRef<InputView>? = null
     private var listContentHeight = 0f
@@ -207,10 +208,10 @@ internal class StockChatPage : Pager() {
                                 backgroundColor(Color(0xFFFFFFFFL))
                             }
                             WelcomeView(
-                                vm = ctx.vm,
                                 pageWidth = pageWidth,
-                                // Kimi 会先展开输入框并显示光标，欢迎区在键盘真正上推页面时才退场。
                                 compact = { ctx.keyboardHeight > 0f },
+                                promptPage = { ctx.promptPage },
+                                onShuffle = { ctx.promptPage += 1 },
                                 onPrompt = { ctx.send(it) },
                                 onOpenInstrument = { ctx.openDetail(it) },
                             )
@@ -255,12 +256,14 @@ internal class StockChatPage : Pager() {
                         }
                     }
                     ComposerCapsulesView(
+                        pageWidth = pageWidth,
+                        promptPage = { ctx.promptPage },
                         visible = {
-                            !ctx.composerFocused &&
-                                ctx.keyboardHeight == 0f &&
+                            ctx.keyboardHeight == 0f &&
                                 !ctx.voiceMode &&
                                 !ctx.attachmentPanelVisible
                         },
+                        onShuffle = { ctx.promptPage += 1 },
                         onPrompt = { ctx.send(it) },
                     )
                     ComposerView(

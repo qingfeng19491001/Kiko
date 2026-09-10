@@ -59,25 +59,6 @@ class ChatViewModel(
     var hotSnapshots by observableList<MarketSnapshot>()
     var overviewLoading by observable(false)
 
-    /** 欢迎语当前页；点击「换一换」后自增并刷新 [welcomePrompts]。 */
-    var welcomePromptPage by observable(0)
-        private set
-    var welcomePrompts by observableList<QuickPrompt>()
-
-    init {
-        refreshWelcomePrompts()
-    }
-
-    fun shuffleWelcomePrompts() {
-        welcomePromptPage = PromptBank.nextPage(welcomePromptPage)
-        refreshWelcomePrompts()
-    }
-
-    private fun refreshWelcomePrompts() {
-        welcomePrompts.clear()
-        welcomePrompts.addAll(PromptBank.welcomePage(welcomePromptPage))
-    }
-
     fun loadHistory() {
         conversations.clear()
         conversations.addAll(conversationRepository.loadAll())
@@ -99,9 +80,6 @@ class ChatViewModel(
         marketRepository.loadSnapshots(StockCatalog.hot) { list ->
             hotSnapshots.clear()
             hotSnapshots.addAll(list)
-            if (list.any { it.quote.isMock } && banner.isEmpty()) {
-                banner = "部分行情接口不可用，已使用离线演示数据"
-            }
             done()
         }
     }
@@ -202,9 +180,10 @@ class ChatViewModel(
             override fun onComplete(answer: AiAnswer) {
                 aiMessage.status = MessageStatus.DONE
                 isGenerating = false
-                if (answer.relatedSnapshots.any { it.quote.isMock }) {
+                val snapshots = answer.relatedSnapshots
+                if (snapshots.isNotEmpty() && snapshots.all { it.quote.isMock }) {
                     banner = "部分行情接口不可用，已使用离线演示数据"
-                } else if (answer.relatedSnapshots.isNotEmpty()) {
+                } else if (snapshots.any { !it.quote.isMock }) {
                     banner = ""
                 }
                 persistCurrent()

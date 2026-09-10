@@ -32,7 +32,6 @@ import com.tencent.kuikly.core.views.ActivityIndicator
 import com.tencent.kuikly.core.views.Image
 import com.tencent.kuikly.core.views.Input
 import com.tencent.kuikly.core.views.InputView
-import com.tencent.kuikly.core.views.Scroller
 import com.tencent.kuikly.core.views.Text
 import com.tencent.kuikly.core.views.View
 
@@ -95,9 +94,10 @@ fun ViewContainer<*, *>.ChatNavBar(
 // region 首页（欢迎态）
 
 fun ViewContainer<*, *>.WelcomeView(
-    vm: ChatViewModel,
     pageWidth: Float,
     compact: () -> Boolean,
+    promptPage: () -> Int,
+    onShuffle: () -> Unit,
     onPrompt: (String) -> Unit,
     onOpenInstrument: (String) -> Unit,
 ) {
@@ -111,7 +111,6 @@ fun ViewContainer<*, *>.WelcomeView(
                     size(58f, 58f)
                     borderRadius(29f)
                     src(ImageUri.commonAssets("robot.png"))
-                    // 页面被键盘压缩时整体仍向上移动；这段反向补偿把净位移控制在 Kimi 的约 30dp。
                     transform(Translate(0f, 0f, 0f, if (isCompact) 30f else 0f))
                     animation(Animation.easeOut(0.28f), isCompact)
                 }
@@ -162,19 +161,13 @@ fun ViewContainer<*, *>.WelcomeView(
                         fontSize(13f); fontWeight600(); color(AppTheme.textSecondary)
                     }
                 }
-                View {
-                    attr { flexDirectionRow(); alignItemsCenter(); paddingLeft(8f); paddingTop(4f); paddingBottom(4f) }
-                    event { click { vm.shuffleWelcomePrompts() } }
-                    Icon(IconKind.REFRESH, 14f, Color(0xFF398BB5L), 1.6f)
-                    Text {
-                        attr {
-                            text("换一换")
-                            fontSize(13f); color(Color(0xFF398BB5L)); marginLeft(4f)
-                        }
-                    }
-                }
+                ShuffleButton(
+                    promptPage = promptPage,
+                    pageCount = PromptBank.pageCount(),
+                    onClick = onShuffle,
+                )
             }
-            vfor({ vm.welcomePrompts }) { item ->
+            (0 until PromptBank.WELCOME_PAGE_SIZE).forEach { index ->
                 View {
                     attr {
                         flexDirectionRow(); alignItemsCenter()
@@ -182,11 +175,16 @@ fun ViewContainer<*, *>.WelcomeView(
                         backgroundColor(AppTheme.surfaceMuted); borderRadius(20f)
                         paddingLeft(14f); paddingRight(12f)
                     }
-                    event { click { onPrompt(item.prompt) } }
-                    Icon(PromptBank.iconFor(item.category), 16f, AppTheme.textTertiary)
+                    event {
+                        click {
+                            PromptBank.welcomePage(promptPage()).getOrNull(index)?.prompt?.let(onPrompt)
+                        }
+                    }
+                    Icon(IconKind.SPARKLE, 16f, AppTheme.textTertiary)
                     Text {
                         attr {
-                            text(item.prompt)
+                            val item = PromptBank.welcomePage(promptPage()).getOrNull(index)
+                            text(item?.prompt ?: "")
                             fontSize(14f); color(AppTheme.textPrimary); marginLeft(8f)
                             flex(1f); lines(1)
                         }
@@ -516,53 +514,93 @@ private fun thinkingText(intent: Intent): String = when (intent) {
 
 // region 输入框
 
-/** 输入框上方的提问胶囊，欢迎态与对话态均可点选发送。 */
+/** 输入框上方的提问胶囊：固定 6 个坑位，文案在 attr 里读页码，保证换一换会刷新。 */
 fun ViewContainer<*, *>.ComposerCapsulesView(
+    pageWidth: Float,
+    promptPage: () -> Int,
     visible: () -> Boolean,
+    onShuffle: () -> Unit,
     onPrompt: (String) -> Unit,
 ) {
     View {
         attr {
             val isVisible = visible()
-            height(if (isVisible) 44f else 0f)
+            height(if (isVisible) 100f else 0f)
             opacity(if (isVisible) 1f else 0f)
             overflow(true)
             animation(Animation.easeOut(0.2f), isVisible)
         }
-        Scroller {
+        View {
             attr {
-                flexDirectionRow()
-                height(36f)
-                marginTop(4f)
-                showScrollerIndicator(false)
+                flexDirectionRow(); alignItemsCenter(); justifyContentSpaceBetween()
+                height(28f); paddingLeft(16f); paddingRight(12f)
             }
-            View {
+            Text {
                 attr {
-                    flexDirectionRow()
-                    alignItemsCenter()
-                    height(36f)
-                    paddingLeft(16f)
-                    paddingRight(8f)
+                    text("大家都在问")
+                    fontSize(11f); fontWeight600(); color(AppTheme.textTertiary)
                 }
-                PromptBank.composerCapsules.forEach { item ->
-                    View {
-                        attr {
-                            flexDirectionRow(); alignItemsCenter()
-                            height(36f); marginRight(8f)
-                            backgroundColor(AppTheme.surfaceMuted); borderRadius(18f)
-                            paddingLeft(12f); paddingRight(12f)
+            }
+            ShuffleButton(
+                promptPage = promptPage,
+                pageCount = PromptBank.pageCount(PromptBank.CAPSULE_PAGE_SIZE, PromptBank.composerCapsules),
+                onClick = onShuffle,
+            )
+        }
+        View {
+            attr {
+                flexDirectionRow(); flexWrapWrap(); alignItemsCenter()
+                paddingLeft(16f); paddingRight(8f)
+            }
+            (0 until PromptBank.CAPSULE_PAGE_SIZE).forEach { index ->
+                View {
+                    attr {
+                        flexDirectionRow(); alignItemsCenter()
+                        height(32f); marginRight(8f); marginBottom(8f)
+                        backgroundColor(AppTheme.surfaceMuted); borderRadius(16f)
+                        paddingLeft(12f); paddingRight(12f)
+                    }
+                    event {
+                        click {
+                            PromptBank.capsulePage(promptPage()).getOrNull(index)?.prompt?.let(onPrompt)
                         }
-                        event { click { onPrompt(item.prompt) } }
-                        Text {
-                            attr {
-                                text(item.capsule)
-                                fontSize(13f)
-                                color(AppTheme.textPrimary)
-                                lines(1)
-                            }
+                    }
+                    Text {
+                        attr {
+                            val item = PromptBank.capsulePage(promptPage()).getOrNull(index)
+                            text(item?.capsule ?: "")
+                            fontSize(13f)
+                            color(AppTheme.textPrimary)
+                            lines(1)
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+private fun ViewContainer<*, *>.ShuffleButton(
+    promptPage: () -> Int,
+    pageCount: Int,
+    onClick: () -> Unit,
+) {
+    View {
+        attr {
+            flexDirectionRow(); alignItemsCenter()
+            height(28f)
+            paddingLeft(10f); paddingRight(10f)
+            backgroundColor(Color(0xFFEAF4FAL))
+            borderRadius(14f)
+        }
+        event { click { onClick() } }
+        Icon(IconKind.REFRESH, 13f, Color(0xFF398BB5L), 1.6f)
+        Text {
+            attr {
+                val page = promptPage()
+                val current = if (pageCount == 0) 1 else page.mod(pageCount) + 1
+                text("换一换 $current/$pageCount")
+                fontSize(12f); color(Color(0xFF398BB5L)); marginLeft(4f)
             }
         }
     }

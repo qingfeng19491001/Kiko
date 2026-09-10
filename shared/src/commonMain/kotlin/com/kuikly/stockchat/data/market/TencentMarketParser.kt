@@ -26,7 +26,7 @@ object TencentMarketParser {
     const val MINUTE_URL = "https://web.ifzq.gtimg.cn/appstock/app/minute/query"
 
     fun quoteUrl(instruments: List<Instrument>): String =
-        QUOTE_BASE + instruments.joinToString(",") { it.tencentSymbol }
+        QUOTE_BASE + instruments.flatMap { quoteLookupKeys(it) }.distinct().joinToString(",")
 
     fun klineParam(instrument: Instrument, period: KLinePeriod, count: Int): String {
         val fq = if (instrument.isIndex) "" else "qfq"
@@ -53,8 +53,27 @@ object TencentMarketParser {
         return result
     }
 
+    /**
+     * 腾讯美股回包键名是 `usTSLA`，目录里的代码却是 `usTSLA.OQ`，必须同时兼容。
+     */
+    fun quoteLookupKeys(instrument: Instrument): List<String> {
+        val primary = instrument.tencentSymbol
+        val byCode = instrument.market.tencentPrefix + instrument.code
+        val withoutDot = primary.substringBefore('.')
+        return listOf(primary, byCode, withoutDot).distinct()
+    }
+
+    fun quoteFields(raw: String, instrument: Instrument): List<String>? {
+        val map = splitQuoteResponse(raw)
+        quoteLookupKeys(instrument).forEach { key ->
+            map[key]?.let { return it }
+        }
+        val needle = instrument.code.lowercase()
+        return map.entries.firstOrNull { it.key.lowercase().contains(needle) }?.value
+    }
+
     fun parseQuote(instrument: Instrument, fields: List<String>): Quote? {
-        if (fields.size < 40) return null
+        if (fields.size < 6) return null
         fun d(index: Int): Double? = fields.getOrNull(index)?.trim()?.toDoubleOrNull()
         val price = d(3) ?: return null
         val prevClose = d(4) ?: return null
@@ -139,7 +158,7 @@ object TencentMarketParser {
 
     fun parseKLine(instrument: Instrument, period: KLinePeriod, json: JSONObject): List<KLineBar>? {
         val data = json.optJSONObject("data") ?: return null
-        val node = data.optJSONObject(instrument.tencentSymbol) ?: return null
+        val node = quoteLookupKeys(instrument).firstNotNullOfOrNull { data.optJSONObject(it) } ?: return null
         val candidates = listOf("qfq${period.apiKey}", period.apiKey, "hfq${period.apiKey}")
         val array = candidates.firstNotNullOfOrNull { node.optJSONArray(it) } ?: return null
         val bars = ArrayList<KLineBar>(array.length())
