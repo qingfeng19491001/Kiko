@@ -33,8 +33,7 @@ object DateUtil {
      */
     fun civilFromEpochMillis(epochMillis: Long, offsetHours: Int = 8): Triple<Int, Int, Int> {
         val localMs = epochMillis + offsetHours * 3_600_000L
-        val z = (localMs / DAY_MS).toInt()
-        return civilFromDays(z)
+        return civilFromDays(localMs / DAY_MS)
     }
 
     /** yyyy-MM-dd 加减自然日；失败返回 null */
@@ -43,7 +42,7 @@ object DateUtil {
         val year = ymd.substring(0, 4).toIntOrNull() ?: return null
         val month = ymd.substring(5, 7).toIntOrNull() ?: return null
         val day = ymd.substring(8, 10).toIntOrNull() ?: return null
-        val (ny, nm, nd) = civilFromDays((daysFromCivil(year, month, day) + days).toInt())
+        val (ny, nm, nd) = civilFromDays(daysFromCivil(year, month, day) + days)
         fun pad(value: Int): String = value.toString().padStart(2, '0')
         return "$ny-${pad(nm)}-${pad(nd)}"
     }
@@ -76,28 +75,31 @@ object DateUtil {
         return out
     }
 
-    /** 毫秒时间戳 → "yyyy-MM-dd HH:mm"（东八区），供分钟级 K 线使用 */
-    fun formatEpochMinutes(epochMillis: Long, offsetHours: Int = 8): String {
-        val localMs = epochMillis + offsetHours * 3_600_000L
-        val days = (localMs / DAY_MS).toInt()
+    data class LocalClock(
+        val date: String,
+        val hhmm: String,
+        val hour: Int,
+        val minute: Int,
+    )
+
+    /** 把 epoch 毫秒格式化到指定时区的日历日和 HH:mm。 */
+    fun toLocalClock(epochMs: Long, offsetHours: Int): LocalClock? {
+        val localMs = epochMs + offsetHours * 3_600_000L
+        if (localMs < 0) return null
+        val days = localMs / DAY_MS
+        val msInDay = localMs % DAY_MS
+        val hour = (msInDay / 3_600_000L).toInt()
+        val minute = ((msInDay % 3_600_000L) / 60_000L).toInt()
         val (year, month, day) = civilFromDays(days)
-        val minuteOfDay = ((localMs % DAY_MS) / 60_000L).toInt()
-        fun pad(value: Int): String = value.toString().padStart(2, '0')
-        return "$year-${pad(month)}-${pad(day)} ${pad(minuteOfDay / 60)}:${pad(minuteOfDay % 60)}"
+        val date = "${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}"
+        val hhmm = "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
+        return LocalClock(date, hhmm, hour, minute)
     }
 
-    /** Howard Hinnant 的 days → civil 算法（自 1970-01-01 起的天数 → 年月日） */
-    private fun civilFromDays(z: Int): Triple<Int, Int, Int> {
-        val zz = z + 719468
-        val era = if (zz >= 0) zz / 146097 else (zz - 146096) / 146097
-        val doe = zz - era * 146097
-        val yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
-        val y = yoe + era * 400
-        val doy = doe - (365 * yoe + yoe / 4 - yoe / 100)
-        val mp = (5 * doy + 2) / 153
-        val d = doy - (153 * mp + 2) / 5 + 1
-        val m = if (mp < 10) mp + 3 else mp - 9
-        return Triple(y + if (m <= 2) 1 else 0, m, d)
+    /** 毫秒时间戳 → "yyyy-MM-dd HH:mm"（东八区），供分钟级 K 线使用 */
+    fun formatEpochMinutes(epochMillis: Long, offsetHours: Int = 8): String {
+        val clock = toLocalClock(epochMillis, offsetHours) ?: return ""
+        return "${clock.date} ${clock.hhmm}"
     }
 
     /** Howard Hinnant 的 civil → days 算法（自 1970-01-01 起的天数） */
@@ -109,5 +111,20 @@ object DateUtil {
         val doy = (153 * mp + 2) / 5 + day - 1
         val doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
         return era * 146097L + doe - 719468L
+    }
+
+    /** Howard Hinnant 的 days → civil 逆运算。 */
+    private fun civilFromDays(z: Long): Triple<Int, Int, Int> {
+        val zz = z + 719468L
+        val era = (if (zz >= 0) zz else zz - 146096) / 146097
+        val doe = zz - era * 146097
+        val yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+        var y = yoe + era * 400
+        val doy = doe - (365 * yoe + yoe / 4 - yoe / 100)
+        val mp = (5 * doy + 2) / 153
+        val d = doy - (153 * mp + 2) / 5 + 1
+        val m = mp + if (mp < 10) 3 else -9
+        if (m <= 2) y += 1
+        return Triple(y.toInt(), m.toInt(), d.toInt())
     }
 }

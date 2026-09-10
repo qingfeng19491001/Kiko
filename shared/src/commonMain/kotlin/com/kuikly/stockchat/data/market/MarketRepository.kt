@@ -1,5 +1,6 @@
 package com.kuikly.stockchat.data.market
 
+import com.kuikly.stockchat.data.ai.AiConfig
 import com.kuikly.stockchat.data.network.HttpClient
 import com.kuikly.stockchat.domain.model.Instrument
 import com.kuikly.stockchat.domain.model.IntradaySeries
@@ -36,9 +37,14 @@ class MarketRepository(private val http: HttpClient) {
         fun finish() {
             pending -= 1
             if (pending > 0) return
-            val finalBars = bars ?: MockMarketData.dailyBars(instrument, 320)
-            val finalQuote = quote ?: quoteFromBars(instrument, finalBars)
-            callback(MarketSnapshot(finalQuote, finalBars, null))
+            val liveBars = bars
+            val liveQuote = quote
+            when {
+                liveQuote != null && liveBars != null -> callback(MarketSnapshot(liveQuote, liveBars, null))
+                liveQuote != null -> callback(MarketSnapshot(liveQuote, MockMarketData.dailyBars(instrument, 320), null))
+                liveBars != null -> callback(MarketSnapshot(quoteFromBars(instrument, liveBars), liveBars, null))
+                else -> callback(MockMarketData.snapshot(instrument))
+            }
         }
         loadQuote(instrument) { quote = it; finish() }
         loadBars(instrument, KLinePeriod.DAY, 320) { bars = it; finish() }
@@ -74,7 +80,7 @@ class MarketRepository(private val http: HttpClient) {
         http.get(TencentMarketParser.quoteUrl(listOf(instrument))) { text, _ ->
             val quote = text?.let { raw ->
                 runCatching {
-                    val fields = TencentMarketParser.splitQuoteResponse(raw)[instrument.tencentSymbol]
+                    val fields = TencentMarketParser.quoteFields(raw, instrument)
                     fields?.let { TencentMarketParser.parseQuote(instrument, it) }
                 }.getOrNull()
             }
@@ -126,6 +132,33 @@ class MarketRepository(private val http: HttpClient) {
             callback(MockMarketData.intraday(instrument, quote), true)
             return
         }
+        val token = AiConfig.ITICK_TOKEN
+        if (token.isNotBlank()) {
+            http.get(
+                ITickKlineParser.BASE_URL + ITickKlineParser.path(instrument),
+                ITickKlineParser.query(instrument),
+                mapOf("accept" to "application/json", "token" to token),
+            ) { text, _ ->
+                val series = text?.let { raw ->
+                    runCatching { ITickKlineParser.parseIntraday(raw, instrument, quote.prevClose) }.getOrNull()
+                }
+                if (series != null) {
+                    intradayCache[instrument.key] = Cached(series, DateTime.currentTimestamp())
+                    callback(series, false)
+                } else {
+                    loadTencentIntraday(instrument, quote, callback)
+                }
+            }
+        } else {
+            loadTencentIntraday(instrument, quote, callback)
+        }
+    }
+
+    private fun loadTencentIntraday(
+        instrument: Instrument,
+        quote: Quote,
+        callback: (series: IntradaySeries, isMock: Boolean) -> Unit,
+    ) {
         http.get(TencentMarketParser.MINUTE_URL, mapOf("code" to instrument.tencentSymbol)) { text, _ ->
             val series = text?.let { raw ->
                 runCatching { TencentMarketParser.parseMinute(instrument, quote.prevClose, JSONObject(raw)) }.getOrNull()
@@ -141,14 +174,14 @@ class MarketRepository(private val http: HttpClient) {
 
     // endregion
 
-    /** 实时行情失败但日 K 成功时，用最后两根 K 线推导报价 */
+    /** 实时行情失败但日 K 成功时，用最后两根 K 线推导报价，不再混入演示 PE / 市值。 */
     private fun quoteFromBars(instrument: Instrument, bars: List<KLineBar>): Quote {
-        val mock = MockMarketData.snapshot(instrument).quote
-        if (bars.size < 2) return mock
+        if (bars.size < 2) return MockMarketData.snapshot(instrument).quote
         val last = bars.last()
         val prev = bars[bars.size - 2]
         val change = last.close - prev.close
-        return mock.copy(
+        return Quote(
+            instrument = instrument,
             price = last.close,
             prevClose = prev.close,
             open = last.open,
@@ -161,7 +194,7 @@ class MarketRepository(private val http: HttpClient) {
             amplitude = if (prev.close > 0) (last.high - last.low) / prev.close * 100 else null,
             updateTime = last.date.takeLast(5).replace('/', '-') + " 收盘",
             tradingStatus = "${instrument.market.label}已收盘",
-            isMock = true,
+            isMock = false,
         )
     }
 }

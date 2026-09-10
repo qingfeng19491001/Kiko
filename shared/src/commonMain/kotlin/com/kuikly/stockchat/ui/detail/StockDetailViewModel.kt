@@ -101,9 +101,6 @@ class StockDetailViewModel(
             insight = AnswerComposer.detailInsight(snap, result)
             risks = AnswerComposer.riskItems(snap, result)
             intraday = snap.intraday
-            if (period == KLinePeriod.MINUTE && snap.intraday == null) {
-                period = KLinePeriod.DAY
-            }
             loadState = LoadState.READY
             refreshChart()
             ensureDefaultSelection()

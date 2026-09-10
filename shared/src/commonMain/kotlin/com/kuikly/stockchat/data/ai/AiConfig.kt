@@ -30,6 +30,9 @@ object AiConfig {
     val BASE_URL: String
         get() = if (API_KEY.startsWith("sk-sp-")) TOKEN_PLAN_BASE_URL else PAYGO_BASE_URL
 
+    /** iTick REST Token（来自本地 AiSecrets.kt，不入库）。空则详情分时回退腾讯。 */
+    val ITICK_TOKEN: String get() = AiSecrets.ITICK_TOKEN
+
     /** 默认模型 */
     const val MODEL = "qwen3.8-flash"
 

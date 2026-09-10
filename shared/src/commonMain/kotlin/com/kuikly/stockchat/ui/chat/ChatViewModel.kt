@@ -47,9 +47,6 @@ class ChatViewModel(
     /** 是否有消息（欢迎页 / 对话页切换） */
     var hasConversation by observable(false)
 
-    /** 首页推荐问题轮换偏移（「换一换」） */
-    var welcomeOffset by observable(0)
-
     /** 抽屉内搜索关键词（空串 = 不过滤） */
     var drawerQuery by observable("")
 
@@ -138,9 +135,6 @@ class ChatViewModel(
         marketRepository.loadSnapshots(StockCatalog.hot) { list ->
             hotSnapshots.clear()
             hotSnapshots.addAll(list)
-            if (list.any { it.quote.isMock } && banner.isEmpty()) {
-                banner = "部分行情接口不可用，已使用离线演示数据"
-            }
             done()
         }
     }
@@ -255,9 +249,10 @@ class ChatViewModel(
                 override fun onComplete(answer: AiAnswer) {
                     aiMessage.status = MessageStatus.DONE
                     isGenerating = false
-                    if (answer.relatedSnapshots.any { it.quote.isMock }) {
+                    val snapshots = answer.relatedSnapshots
+                    if (snapshots.isNotEmpty() && snapshots.all { it.quote.isMock }) {
                         banner = "部分行情接口不可用，已使用离线演示数据"
-                    } else if (answer.relatedSnapshots.isNotEmpty()) {
+                    } else if (snapshots.any { !it.quote.isMock }) {
                         banner = ""
                     }
                     persistCurrent()

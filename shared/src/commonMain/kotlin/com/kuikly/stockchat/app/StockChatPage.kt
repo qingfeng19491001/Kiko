@@ -23,6 +23,7 @@ import com.kuikly.stockchat.data.network.KuiklyHttpClient
 import com.kuikly.stockchat.ui.chat.AssistantMessageView
 import com.kuikly.stockchat.ui.chat.ChatNavBar
 import com.kuikly.stockchat.ui.chat.ChatViewModel
+import com.kuikly.stockchat.ui.chat.ComposerCapsulesView
 import com.kuikly.stockchat.ui.chat.ComposerView
 import com.kuikly.stockchat.ui.chat.DrawerPhysics
 import com.kuikly.stockchat.ui.chat.DrawerMotion
@@ -88,6 +89,7 @@ internal class StockChatPage : Pager() {
     private var voiceWavePhase by observable(0)
     private var voiceFingerX by observable(0f)
     private var voiceFingerY by observable(0f)
+    private var promptPage by observable(0)
     private var listRef: ViewRef<ListView<*, *>>? = null
     private var inputRef: ViewRef<InputView>? = null
     private var listContentHeight = 0f
@@ -241,10 +243,10 @@ internal class StockChatPage : Pager() {
                                 backgroundColor(Color(0xFFFFFFFFL))
                             }
                             WelcomeView(
-                                vm = ctx.vm,
                                 pageWidth = pageWidth,
-                                // Kimi 会先展开输入框并显示光标，欢迎区在键盘真正上推页面时才退场。
                                 compact = { ctx.keyboardHeight > 0f },
+                                promptPage = { ctx.promptPage },
+                                onShuffle = { ctx.promptPage += 1 },
                                 onPrompt = { ctx.send(it) },
                                 onOpenInstrument = { ctx.openDetail(it) },
                             )
@@ -286,6 +288,17 @@ internal class StockChatPage : Pager() {
                             View { attr { height(20f) } }
                         }
                     }
+                    ComposerCapsulesView(
+                        pageWidth = pageWidth,
+                        promptPage = { ctx.promptPage },
+                        visible = {
+                            ctx.keyboardHeight == 0f &&
+                                !ctx.voiceMode &&
+                                !ctx.attachmentPanelVisible
+                        },
+                        onShuffle = { ctx.promptPage += 1 },
+                        onPrompt = { ctx.send(it) },
+                    )
                     ComposerView(
                         vm = ctx.vm,
                         // 附件面板使用固定的收起态输入框布局，避免从键盘态切入时高度漂移。

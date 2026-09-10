@@ -357,6 +357,17 @@ internal class StockDetailPage : Pager() {
                                 paddingLeft(AppTheme.pageHorizontalPadding)
                                 paddingRight(AppTheme.pageHorizontalPadding)
                             }
+                            Text {
+                                attr {
+                                    text(
+                                        if (ctx.vm.period == KLinePeriod.MINUTE) "分时 · 分钟 K，有 iTick 走分钟线，否则回退腾讯"
+                                        else "${ctx.vm.period.label} · 双指缩放，已叠加 MA5 / MA10 / MA20",
+                                    )
+                                    fontSize(11f)
+                                    color(AppTheme.textTertiary)
+                                    marginTop(6f)
+                                }
+                            }
                             Spacer(12f)
                             vbind({
                                 listOf(
