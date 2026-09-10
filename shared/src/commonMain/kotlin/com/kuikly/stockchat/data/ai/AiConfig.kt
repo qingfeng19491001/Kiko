@@ -22,6 +22,9 @@ object AiConfig {
     /** 火山引擎语音 API Key（来自本地 AiSecrets.kt，不入库）。 */
     val VOLC_API_KEY: String get() = AiSecrets.VOLC_API_KEY
 
+    /** iTick REST Token（来自本地 AiSecrets.kt，不入库）。空则详情分时回退腾讯。 */
+    val ITICK_TOKEN: String get() = AiSecrets.ITICK_TOKEN
+
     /** 默认模型 */
     const val MODEL = "qwen3.8-flash"
 
