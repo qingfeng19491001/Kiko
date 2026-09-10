@@ -1,5 +1,6 @@
 package com.kuikly.stockchat.data.market
 
+import com.kuikly.stockchat.data.ai.AiConfig
 import com.kuikly.stockchat.data.network.HttpClient
 import com.kuikly.stockchat.domain.model.Instrument
 import com.kuikly.stockchat.domain.model.IntradaySeries
@@ -126,6 +127,33 @@ class MarketRepository(private val http: HttpClient) {
             callback(MockMarketData.intraday(instrument, quote), true)
             return
         }
+        val token = AiConfig.ITICK_TOKEN
+        if (token.isNotBlank()) {
+            http.get(
+                ITickKlineParser.BASE_URL + ITickKlineParser.path(instrument),
+                ITickKlineParser.query(instrument),
+                mapOf("accept" to "application/json", "token" to token),
+            ) { text, _ ->
+                val series = text?.let { raw ->
+                    runCatching { ITickKlineParser.parseIntraday(raw, instrument, quote.prevClose) }.getOrNull()
+                }
+                if (series != null) {
+                    intradayCache[instrument.key] = Cached(series, DateTime.currentTimestamp())
+                    callback(series, false)
+                } else {
+                    loadTencentIntraday(instrument, quote, callback)
+                }
+            }
+        } else {
+            loadTencentIntraday(instrument, quote, callback)
+        }
+    }
+
+    private fun loadTencentIntraday(
+        instrument: Instrument,
+        quote: Quote,
+        callback: (series: IntradaySeries, isMock: Boolean) -> Unit,
+    ) {
         http.get(TencentMarketParser.MINUTE_URL, mapOf("code" to instrument.tencentSymbol)) { text, _ ->
             val series = text?.let { raw ->
                 runCatching { TencentMarketParser.parseMinute(instrument, quote.prevClose, JSONObject(raw)) }.getOrNull()

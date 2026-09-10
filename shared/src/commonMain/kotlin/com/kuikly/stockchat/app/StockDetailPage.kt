@@ -215,7 +215,7 @@ internal class StockDetailPage : Pager() {
                         Text {
                             attr {
                                 text(
-                                    if (ctx.vm.period == KLinePeriod.MINUTE) "分时 · 虚线昨收，下方成交量"
+                                    if (ctx.vm.period == KLinePeriod.MINUTE) "分时 · 分钟 K，虚线昨收，下方成交量"
                                     else "${ctx.vm.period.label} · 双指缩放，已叠加 MA5 / MA10 / MA20",
                                 )
                                 fontSize(11f)

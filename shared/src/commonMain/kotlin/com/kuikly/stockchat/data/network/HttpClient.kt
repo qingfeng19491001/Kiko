@@ -11,7 +11,12 @@ interface HttpClient {
     /**
      * @param callback text 为原始响应字符串（JSON 或纯文本），失败时为 null
      */
-    fun get(url: String, params: Map<String, String> = emptyMap(), callback: (text: String?, error: String?) -> Unit)
+    fun get(
+        url: String,
+        params: Map<String, String> = emptyMap(),
+        headers: Map<String, String> = emptyMap(),
+        callback: (text: String?, error: String?) -> Unit,
+    )
 
     /**
      * 发送 JSON body 的 POST 请求。
@@ -35,14 +40,23 @@ interface HttpClient {
  */
 class KuiklyHttpClient(private val pager: IPager) : HttpClient {
 
-    override fun get(url: String, params: Map<String, String>, callback: (String?, String?) -> Unit) {
+    override fun get(
+        url: String,
+        params: Map<String, String>,
+        headers: Map<String, String>,
+        callback: (String?, String?) -> Unit,
+    ) {
         val module = pager.acquireModule<NetworkModule>(NetworkModule.MODULE_NAME)
         val param = JSONObject().apply { params.forEach { (k, v) -> put(k, v) } }
-        val headers = JSONObject().apply {
-            put("Referer", "https://gu.qq.com/")
+        val headerJson = JSONObject().apply {
             put("User-Agent", "Mozilla/5.0 (StockChat Kuikly Demo)")
+            if (headers.isEmpty()) {
+                put("Referer", "https://gu.qq.com/")
+            } else {
+                headers.forEach { (k, v) -> put(k, v) }
+            }
         }
-        module.httpRequest(url, false, param, headers, null, 15) { data, success, errorMsg, _ ->
+        module.httpRequest(url, false, param, headerJson, null, 15) { data, success, errorMsg, _ ->
             if (!success) {
                 callback(null, errorMsg.ifEmpty { "network error" })
                 return@httpRequest
