@@ -8,6 +8,11 @@
 
 ## 项目演示视频
 
+三端（Android / iOS / 鸿蒙）行情 → 个股 → AI 问答走查：
+
+[kiko-demo.mp4](docs/kiko-demo.mp4)
+
+---
 
 ## 完成任务情况
 
