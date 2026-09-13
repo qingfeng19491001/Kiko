@@ -107,10 +107,17 @@ class MarketRepository(private val http: HttpClient) {
             callback(cached)
             return
         }
-        http.get(TencentMarketParser.quoteUrl(pending)) { text, _ ->
-            val fresh = linkedMapOf<String, Quote>()
-            text?.let { raw ->
-                pending.forEach { instrument ->
+        // iOS NetworkModule 会把带逗号的 `q=hk00700,hkHSI` 整段判失败，详情单票却正常。
+        // 按单票拆开，和详情页同一条 URL 形态。
+        val fresh = linkedMapOf<String, Quote>()
+        fun fetchAt(index: Int) {
+            if (index >= pending.size) {
+                callback(cached + fresh)
+                return
+            }
+            val instrument = pending[index]
+            http.get(TencentMarketParser.quoteUrl(listOf(instrument))) { text, _ ->
+                text?.let { raw ->
                     val quote = runCatching {
                         val fields = TencentMarketParser.quoteFields(raw, instrument)
                         fields?.let { TencentMarketParser.parseQuote(instrument, it) }
@@ -120,9 +127,10 @@ class MarketRepository(private val http: HttpClient) {
                         fresh[instrument.key] = quote
                     }
                 }
+                fetchAt(index + 1)
             }
-            callback(cached + fresh)
         }
+        fetchAt(0)
     }
 
     fun loadQuotesOrMock(instruments: List<Instrument>, callback: (quotes: Map<String, Quote>, usedMock: Boolean) -> Unit) {

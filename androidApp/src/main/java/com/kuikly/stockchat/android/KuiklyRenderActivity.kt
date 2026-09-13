@@ -120,6 +120,9 @@ class KuiklyRenderActivity : AppCompatActivity(), KuiklyRenderViewBaseDelegatorD
         } else {
             JSONObject(jsonStr).toMap()
         }
+        intent.getStringExtra("instrumentKey")?.takeIf { it.isNotEmpty() }?.let {
+            params["instrumentKey"] = it
+        }
         params["platform"] = "android"
         return params
     }

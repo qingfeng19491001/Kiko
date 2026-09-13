@@ -14,10 +14,29 @@ export default class EntryAbility extends UIAbility {
     hilog.info(0x0000, 'StockChat', 'Ability onCreate');
     AppStorage.setOrCreate<common.UIAbilityContext>('abilityContext', this.context);
 
-    // 冷启动直达：--ps pageName StockDetail
+    // 冷启动直达：aa start --ps pageName StockDetail --ps instrumentKey hk00700
     const pageName = want.parameters?.['pageName'] as string;
     if (pageName) {
       AppStorage.setOrCreate<string>('stockchat_page_name', pageName);
+    }
+    const pageData: Record<string, Object> = {};
+    const instrumentKey = want.parameters?.['instrumentKey'] as string;
+    if (instrumentKey) {
+      pageData['instrumentKey'] = instrumentKey;
+    }
+    const pageDataJson = want.parameters?.['pageData'] as string;
+    if (pageDataJson) {
+      try {
+        const parsed = JSON.parse(pageDataJson) as Record<string, Object>;
+        Object.keys(parsed).forEach((key) => {
+          pageData[key] = parsed[key];
+        });
+      } catch (_error) {
+        // keep instrumentKey-only payload
+      }
+    }
+    if (Object.keys(pageData).length > 0) {
+      AppStorage.setOrCreate<Record<string, Object>>('stockchat_page_data', pageData);
     }
   }
 

@@ -5,6 +5,7 @@ import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { fileIo as fs, fileUri, picker } from '@kit.CoreFileKit';
 import { http } from '@kit.NetworkKit';
 import { util } from '@kit.ArkTS';
+import { image } from '@kit.ImageKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 
 export class KRAttachmentModule extends KuiklyRenderBaseModule {
@@ -124,7 +125,7 @@ export class KRAttachmentModule extends KuiklyRenderBaseModule {
         source,
         kind,
         status: 'READY',
-        thumbnailPath: kind === 'IMAGE' ? dest : ''
+        thumbnailPath: kind === 'IMAGE' ? writeThumbnail(dest) : ''
       };
       return item;
     } catch (_error) {
@@ -265,6 +266,10 @@ function asStringMap(value: Object | undefined): Record<string, string> {
     map[key] = String(record[key]);
   });
   return map;
+}
+
+function writeThumbnail(srcPath: string): string {
+  return srcPath;
 }
 
 function mimeOf(name: string): string {

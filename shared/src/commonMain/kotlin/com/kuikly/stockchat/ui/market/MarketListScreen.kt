@@ -47,7 +47,7 @@ internal fun MarketListScreen(
         vif({ host.viewModel.searchOpen }) {
             MarketSearchBar(host)
         }
-        vif({ host.viewModel.usedMock }) {
+        vif({ host.viewModel.usedMock && host.viewModel.board != MarketBoard.WATCH }) {
             View {
                 attr {
                     paddingLeft(16f); paddingRight(16f); paddingTop(6f); paddingBottom(6f)
@@ -117,7 +117,11 @@ internal fun MarketListScreen(
                 }
                 velse {
                     vfor({ host.viewModel.visibleRows }) { row ->
-                        MarketQuoteRowView(row) { host.onOpenDetail(row) }
+                        View {
+                            vbind({ host.viewModel.quoteEpoch }) {
+                                MarketQuoteRowView(row) { host.onOpenDetail(row) }
+                            }
+                        }
                     }
                 }
             }

@@ -60,17 +60,30 @@ object TencentMarketParser {
      */
     fun splitQuoteResponse(raw: String): Map<String, List<String>> {
         val result = mutableMapOf<String, List<String>>()
-        raw.split(";").forEach { segment ->
-            val line = segment.trim()
-            if (!line.startsWith("v_")) return@forEach
-            val eq = line.indexOf('=')
+        val source = extractQuoteLines(raw)
+        source.split(";").forEach { segment ->
+            val line = segment.trim().trimStart('{', '"').trim()
+            val vIndex = line.indexOf("v_")
+            if (vIndex < 0) return@forEach
+            val normalized = line.substring(vIndex)
+            val eq = normalized.indexOf('=')
             if (eq < 0) return@forEach
-            val symbol = line.substring(2, eq).trim()
-            val body = line.substring(eq + 1).trim().trim('"')
-            if (body.isEmpty()) return@forEach
+            val symbol = normalized.substring(2, eq).trim().trim('"')
+            val body = normalized.substring(eq + 1).trim()
+                .removePrefix("\\\"")
+                .trim('"')
+                .removeSuffix("\\\"")
+                .trim('"')
+            if (body.isEmpty() || symbol.isEmpty()) return@forEach
             result[symbol] = body.split("~")
         }
         return result
+    }
+
+    /** 鸿蒙 NetworkModule 可能把整段行情塞进 JSON，`v_` 不在行首。 */
+    private fun extractQuoteLines(raw: String): String {
+        val start = raw.indexOf("v_")
+        return if (start > 0) raw.substring(start) else raw
     }
 
     /**
@@ -87,23 +100,93 @@ object TencentMarketParser {
     fun quoteFields(raw: String, instrument: Instrument): List<String>? {
         val map = splitQuoteResponse(raw)
         quoteLookupKeys(instrument).forEach { key ->
-            map[key]?.let { return it }
+            map[key]?.let { return alignQuoteFields(it, instrument) }
         }
         val needle = instrument.code.lowercase()
-        return map.entries.firstOrNull { it.key.lowercase().contains(needle) }?.value
+        val matches = map.entries.filter { entry ->
+            val key = entry.key.lowercase()
+            key.contains(needle) && !key.startsWith("s_")
+        }
+        val picked = matches.firstOrNull()
+            ?: map.entries.firstOrNull { it.key.lowercase().contains(needle) }
+        return picked?.value?.let { alignQuoteFields(it, instrument) }
+    }
+
+    /**
+     * 腾讯 GBK 名在 UTF-8 误解码时会多出 `~`，代码不再落在 [2]。
+     * 另有实现会丢掉现价，后续字段整体左移一位（昨收出现在 [3]）。
+     */
+    fun alignQuoteFields(fields: List<String>, instrument: Instrument): List<String> {
+        val codeIdx = fields.indexOfFirst { isQuoteCodeField(it, instrument) }
+        val aligned = if (codeIdx > 2) {
+            val name = fields.subList(1, codeIdx).filter { it.isNotBlank() }.joinToString("")
+            listOf(fields[0], name, fields[codeIdx]) + fields.drop(codeIdx + 1)
+        } else {
+            fields
+        }
+        return recoverDroppedLastPrice(aligned)
+    }
+
+    private fun isQuoteCodeField(raw: String, instrument: Instrument): Boolean {
+        val field = raw.trim().lowercase().substringBefore('.')
+        if (field.isEmpty()) return false
+        val code = instrument.code.lowercase()
+        val bare = code.trimStart('0').ifEmpty { code }
+        return field == code ||
+            field == bare ||
+            field == instrument.tencentSymbol.lowercase() ||
+            field == instrument.tencentSymbol.lowercase().substringBefore('.')
+    }
+
+    private fun recoverDroppedLastPrice(fields: List<String>): List<String> {
+        if (fields.size < 6) return fields
+        val listed = fields[3].trim().toDoubleOrNull() ?: return fields
+        val next = fields[4].trim().toDoubleOrNull() ?: return fields
+        val maybeVolume = fields[5].trim().toDoubleOrNull() ?: return fields
+        val looksLikeVolumeAsOpen = listed > 0 && maybeVolume > listed * 50
+        val nextLooksLikePrice = next > 0 && next < listed * 5 && next > listed / 5
+        if (!looksLikeVolumeAsOpen || !nextLooksLikePrice) return fields
+        val window = (27..34).mapNotNull { fields.getOrNull(it)?.trim()?.toDoubleOrNull() }
+        var fromPair: Double? = null
+        for (i in 0 until window.lastIndex) {
+            val change = window[i]
+            val pct = window[i + 1]
+            if (kotlin.math.abs(pct) < 40 &&
+                kotlin.math.abs(listed * pct / 100.0 - change) <= 0.2
+            ) {
+                fromPair = listed + change
+                break
+            }
+        }
+        val expected = fromPair
+        val hinted = fields.drop(6).mapNotNull { it.trim().toDoubleOrNull() }
+            .firstOrNull { candidate ->
+                expected != null && kotlin.math.abs(candidate - expected) <= 0.2
+            }
+        val recovered = hinted ?: fromPair ?: listed
+        return fields.take(3) + recovered.toString() + fields.drop(3)
     }
 
     fun parseQuote(instrument: Instrument, fields: List<String>): Quote? {
-        if (fields.size < 6) return null
-        fun d(index: Int): Double? = fields.getOrNull(index)?.trim()?.toDoubleOrNull()
+        val aligned = alignQuoteFields(fields, instrument)
+        if (aligned.size < 6) return null
+        fun d(index: Int): Double? = aligned.getOrNull(index)?.trim()?.toDoubleOrNull()
         val price = d(3) ?: return null
         val prevClose = d(4) ?: return null
         if (price <= 0 || prevClose <= 0) return null
-        val open = d(5) ?: prevClose
-        val change = d(31) ?: (price - prevClose)
-        val changePct = d(32) ?: (change / prevClose * 100)
-        val high = d(33) ?: price
-        val low = d(34) ?: price
+        val rawOpen = d(5) ?: prevClose
+        val open = if (rawOpen > 0 && rawOpen < price * 5 && rawOpen > price / 5) rawOpen else prevClose
+        val computedChange = price - prevClose
+        val computedPct = if (prevClose > 0) computedChange / prevClose * 100 else 0.0
+        val change = d(31)?.takeIf { kotlin.math.abs(it - computedChange) <= maxTolerance(computedChange) }
+            ?: computedChange
+        val changePct = d(32)?.takeIf { kotlin.math.abs(it - computedPct) <= 0.35 } ?: computedPct
+        val bandHigh = maxOf(price, open, prevClose)
+        val bandLow = minOf(price, open, prevClose)
+        val high = listOfNotNull(d(33), d(35), d(9)).firstOrNull { it >= bandHigh * 0.98 && it <= bandHigh * 1.15 }
+            ?: bandHigh
+        val low = listOfNotNull(d(34), d(5)).firstOrNull { it > 0 && it <= bandLow * 1.02 && it >= bandLow * 0.8 }
+            ?: bandLow
         val isAShare = instrument.market == Market.SH || instrument.market == Market.SZ
         val volumeRaw = d(36) ?: d(6) ?: 0.0
         // A 股成交量单位为“手”，港美股为“股”
@@ -124,7 +207,7 @@ object TencentMarketParser {
         // 52 周高低：A 股在 67/68（47/48 为涨跌停价）；港美股在 48/49
         val high52 = (if (isAShare) d(67) else d(48))?.takeIf { it > 0 }
         val low52 = (if (isAShare) d(68) else d(49))?.takeIf { it > 0 }
-        val time = formatTime(fields.getOrNull(30) ?: "")
+        val time = formatTime(aligned.getOrNull(30) ?: "")
         return Quote(
             instrument = instrument,
             price = price,
@@ -149,6 +232,8 @@ object TencentMarketParser {
             isMock = false,
         )
     }
+
+    private fun maxTolerance(change: Double): Double = maxOf(0.05, kotlin.math.abs(change) * 0.2)
 
     /** 20240621160822 / 2024/06/21 16:08:22 → 06-21 16:08 */
     private fun formatTime(raw: String): String {

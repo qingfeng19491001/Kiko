@@ -27,7 +27,15 @@ struct Index {
     const resolved = routePageName ?? wantPageName ?? DEFAULT_PAGE_NAME;
     this.pageName = resolved;
 
-    const basePageData = (params?.['pageData'] as KRRecord | undefined) ?? {};
+    const wantPageData = AppStorage.get<Record<string, Object>>('stockchat_page_data') ?? {};
+    const routePageData = (params?.['pageData'] as KRRecord | undefined) ?? {};
+    const basePageData: Record<string, Object> = {};
+    Object.keys(wantPageData).forEach((key) => {
+      basePageData[key] = wantPageData[key];
+    });
+    Object.keys(routePageData).forEach((key) => {
+      basePageData[key] = routePageData[key];
+    });
     if (resolved !== 'router') {
       const merged: Record<string, Object> = {};
       const keys = Object.keys(basePageData);
@@ -49,6 +57,7 @@ struct Index {
       Kuikly({
         pagerName: this.pageName ?? DEFAULT_PAGE_NAME,
         pagerData: this.pageData ?? {},
+        assetsDir: getContext(this).resourceDir,
         delegate: this.kuiklyViewDelegate,
         nativeManager: globalNativeManager,
         onControllerReadyCallback: (controller) => {

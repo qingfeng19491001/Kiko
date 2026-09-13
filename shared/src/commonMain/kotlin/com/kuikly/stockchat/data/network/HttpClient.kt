@@ -61,8 +61,7 @@ class KuiklyHttpClient(private val pager: IPager) : HttpClient {
                 callback(null, errorMsg.ifEmpty { "network error" })
                 return@httpRequest
             }
-            val text = if (data.length() == 1 && data.has("data")) data.optString("data") else data.toString()
-            callback(text, null)
+            callback(unwrapNetworkText(data), null)
         }
     }
 
@@ -83,8 +82,20 @@ class KuiklyHttpClient(private val pager: IPager) : HttpClient {
                 callback(null, errorMsg.ifEmpty { "network error" })
                 return@httpRequest
             }
-            val text = if (data.length() == 1 && data.has("data")) data.optString("data") else data.toString()
-            callback(text, null)
+            callback(unwrapNetworkText(data), null)
         }
     }
+}
+
+/**
+ * NetworkModule 对非 JSON 回包装 `{"data":"<raw>"}`。鸿蒙实现常额外带 status/httpCode，
+ * 若仍用 `toString()` 会把 `v_hk00700="..."` 嵌进 JSON，拆 `~` 时丢掉现价字段。
+ */
+internal fun unwrapNetworkText(data: JSONObject): String {
+    if (data.has("data")) {
+        val wrapped = data.optString("data")
+        if (wrapped.startsWith("v_") || wrapped.contains("v_")) return wrapped
+        if (data.length() == 1 && wrapped.isNotEmpty()) return wrapped
+    }
+    return data.toString()
 }

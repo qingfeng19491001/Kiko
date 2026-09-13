@@ -3,6 +3,7 @@ import {
   KRRenderModuleExportCreator,
   KRRenderViewExportCreator
 } from '@kuikly-open/render';
+import { KRKLineChart } from './views/KRKLineChart';
 import { KRBridgeModule } from './modules/KRBridgeModule';
 import { KRContentActionModule } from './modules/KRContentActionModule';
 import { KRAttachmentModule } from './modules/KRAttachmentModule';
@@ -10,11 +11,13 @@ import { KRVoiceModule } from './modules/KRVoiceModule';
 
 /**
  * StockChat 鸿蒙端 View 委托。
- * KRKLineChart 的本地 HAR 尚未作为本工程模块接入，详情页 Full K 线先空着。
+ * KRKLineChart 必须走 V1 注册，才能拿到影子节点上的 frame。
  */
 export class KuiklyViewDelegate extends IKuiklyViewDelegate {
   getCustomRenderViewCreatorRegisterMap(): Map<string, KRRenderViewExportCreator> {
-    return new Map();
+    const map: Map<string, KRRenderViewExportCreator> = new Map();
+    map.set(KRKLineChart.VIEW_NAME, () => new KRKLineChart());
+    return map;
   }
 
   getCustomRenderViewCreatorRegisterMapV2(): Map<string, KRRenderViewExportCreator> {

@@ -20,8 +20,6 @@ import com.tencent.kuikly.core.directives.vif
 import com.tencent.kuikly.core.views.ActivityIndicator
 import com.tencent.kuikly.core.views.Text
 import com.tencent.kuikly.core.views.View
-import com.tencent.kuikly.core.views.SelectableOption
-import com.tencent.kuikly.core.views.SelectionType
 
 fun ViewContainer<*, *>.UserMessageView(message: ChatUiMessage) {
     View {
@@ -75,28 +73,27 @@ fun ViewContainer<*, *>.AssistantMessageView(
             paddingLeft(AppTheme.pageHorizontalPadding)
             paddingRight(AppTheme.pageHorizontalPadding)
             marginTop(18f)
-            selectable(SelectableOption.ENABLE)
-            selectionColor(AppTheme.accent)
+            enableMessageTextSelection(AppTheme.accent)
         }
         event {
-            longPress { params ->
-                if (params.state == "start") {
+            bindMessageTextSelection(
+                onLongPressStart = { x, y ->
                     message.selectionMenuVisible = false
-                    message.selectionRef?.view?.createSelection(params.x, params.y, SelectionType.WORD)
-                }
-            }
-            selectEnd { frame ->
-                message.selectionRef?.view?.getSelection { selection ->
-                    message.selectedText = selection.content.joinToString("\n").trim()
-                    message.selectionMenuX = frame.x.coerceIn(0f, (contentWidth - 72f).coerceAtLeast(0f))
-                    message.selectionMenuY = (frame.y - 38f).coerceAtLeast(0f)
-                    message.selectionMenuVisible = message.selectedText.isNotBlank()
-                }
-            }
-            selectCancel {
-                message.selectionMenuVisible = false
-                message.selectedText = ""
-            }
+                    message.selectionRef?.view?.createWordSelectionAt(x, y)
+                },
+                onSelectEnd = { x, y ->
+                    message.selectionRef?.view?.readSelectedText { text ->
+                        message.selectedText = text
+                        message.selectionMenuX = x.coerceIn(0f, (contentWidth - 72f).coerceAtLeast(0f))
+                        message.selectionMenuY = (y - 38f).coerceAtLeast(0f)
+                        message.selectionMenuVisible = message.selectedText.isNotBlank()
+                    }
+                },
+                onSelectCancel = {
+                    message.selectionMenuVisible = false
+                    message.selectedText = ""
+                },
+            )
         }
         // 身份行
         View {
@@ -183,13 +180,13 @@ fun ViewContainer<*, *>.AssistantMessageView(
                     backgroundColor(AppTheme.ink)
                     allCenter()
                     zIndex(30, useOutline = false)
-                    selectable(SelectableOption.DISABLE)
+                    disableMessageTextSelection()
                 }
                 event {
                     click {
                         val text = message.selectedText
                         message.selectionMenuVisible = false
-                        message.selectionRef?.view?.clearSelection()
+                        message.selectionRef?.view?.clearTextSelection()
                         onCopy(text)
                     }
                 }

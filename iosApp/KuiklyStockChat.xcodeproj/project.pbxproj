@@ -18,6 +18,8 @@
 		FC411B9FD32B3E3E27057256 /* ViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 16E976196062E9A5D2F48D2D /* ViewController.m */; };
 		A11111111111111111111101 /* KRAttachmentModule.m in Sources */ = {isa = PBXBuildFile; fileRef = A11111111111111111111102 /* KRAttachmentModule.m */; };
 		A11111111111111111111103 /* KRVoiceModule.m in Sources */ = {isa = PBXBuildFile; fileRef = A11111111111111111111104 /* KRVoiceModule.m */; };
+		A11111111111111111111113 /* KRKLineChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11111111111111111111111 /* KRKLineChart.swift */; };
+		A11111111111111111111114 /* CGContextCanvasAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11111111111111111111112 /* CGContextCanvasAdapter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -26,6 +28,8 @@
 		A11111111111111111111105 /* KRAttachmentModule.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = KRAttachmentModule.h; sourceTree = "<group>"; };
 		A11111111111111111111104 /* KRVoiceModule.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = KRVoiceModule.m; sourceTree = "<group>"; };
 		A11111111111111111111106 /* KRVoiceModule.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = KRVoiceModule.h; sourceTree = "<group>"; };
+		A11111111111111111111111 /* KRKLineChart.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KRKLineChart.swift; sourceTree = "<group>"; };
+		A11111111111111111111112 /* CGContextCanvasAdapter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CGContextCanvasAdapter.swift; sourceTree = "<group>"; };
 		1A6A7282E054E38976E6F356 /* KuiklyRenderComponentExpandHandler.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = KuiklyRenderComponentExpandHandler.m; sourceTree = "<group>"; };
 		2FF2C5B8064B7377CBEA01B7 /* KuiklyRenderComponentExpandHandler.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = KuiklyRenderComponentExpandHandler.h; sourceTree = "<group>"; };
 		3811863BC5228F4B88A2413D /* main.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
@@ -120,6 +124,8 @@
 				A11111111111111111111102 /* KRAttachmentModule.m */,
 				A11111111111111111111106 /* KRVoiceModule.h */,
 				A11111111111111111111104 /* KRVoiceModule.m */,
+				A11111111111111111111111 /* KRKLineChart.swift */,
+				A11111111111111111111112 /* CGContextCanvasAdapter.swift */,
 				BA865911A33BD92228DB2675 /* KRRouterHandler.m */,
 				5118C798B9E8B161259602C0 /* LaunchScreen.storyboard */,
 				99B4676F6CF9B1E945321C21 /* KuiklyRenderViewController.m */,
@@ -247,6 +253,8 @@
 				FC411B9FD32B3E3E27057256 /* ViewController.m in Sources */,
 				A11111111111111111111101 /* KRAttachmentModule.m in Sources */,
 				A11111111111111111111103 /* KRVoiceModule.m in Sources */,
+				A11111111111111111111113 /* KRKLineChart.swift in Sources */,
+				A11111111111111111111114 /* CGContextCanvasAdapter.swift in Sources */,
 				52035B79C0DFEBFA2385560D /* KRRouterHandler.m in Sources */,
 				DCA36ECA327F68E30FB4E021 /* KuiklyRenderViewController.m in Sources */,
 				8678F71479615ADB70F3072D /* KuiklyRenderComponentExpandHandler.m in Sources */,
@@ -341,6 +349,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.kuikly.stockchat;
 				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "KuiklyStockChat/KuiklyStockChat-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;
 			};
@@ -432,6 +442,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.kuikly.stockchat;
 				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "KuiklyStockChat/KuiklyStockChat-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;

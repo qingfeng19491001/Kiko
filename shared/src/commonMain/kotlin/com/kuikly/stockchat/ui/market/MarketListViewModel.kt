@@ -30,6 +30,7 @@ internal class MarketListViewModel(
     var loading by observable(false)
     var overviewLoading by observable(false)
     var usedMock by observable(false)
+    var quoteEpoch by observable(0)
     var loadGeneration = 0
     var overviewGeneration = 0
 
@@ -54,12 +55,18 @@ internal class MarketListViewModel(
         if (loading && !force) return
         val generation = ++loadGeneration
         loading = true
-        val instruments = rows.map { it.instrument }
+        val instruments = if (board == MarketBoard.WATCH) {
+            val watched = visibleRows.map { it.instrument }
+            watched.ifEmpty { rows.map { it.instrument } }
+        } else {
+            rows.map { it.instrument }
+        }
         marketRepository.loadQuotes(instruments) { quotes ->
             if (generation != loadGeneration) return@loadQuotes
             rows.forEach { row -> row.quote = quotes[row.instrument.key] }
             usedMock = quotes.size < instruments.size
             loading = false
+            quoteEpoch += 1
             applyFilter()
         }
     }
@@ -87,6 +94,15 @@ internal class MarketListViewModel(
     }
 
     fun reloadWatchlist() {
+        applyFilter()
+    }
+
+    fun ensureWatched(keys: List<String>) {
+        keys.forEach { key ->
+            if (key.isNotEmpty() && !watchlistRepository.contains(key)) {
+                watchlistRepository.toggle(key)
+            }
+        }
         applyFilter()
     }
 

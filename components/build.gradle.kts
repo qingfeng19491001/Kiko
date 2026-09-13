@@ -24,7 +24,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation("com.tencent.kuikly-open:core:$kuiklyVersion")
-            implementation("io.github.qingfeng19491001:kuiklyklinechart:$kuiklyKLineVersion")
+            api("io.github.qingfeng19491001:kuiklyklinechart:$kuiklyKLineVersion")
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

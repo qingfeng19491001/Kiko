@@ -24,10 +24,13 @@ internal class MarketListPage : Pager(), MarketListScreenHost {
         super.created()
         viewModel = createMarketListViewModel(this)
         val board = pageData.params.optString("board")
+        val seedWatch = pageData.params.optString("seedWatch")
+        if (seedWatch.isNotEmpty()) {
+            viewModel.ensureWatched(seedWatch.split(',').map { it.trim() }.filter { it.isNotEmpty() })
+        }
         if (board.equals("WATCH", ignoreCase = true) || board == "自选") {
             viewModel.selectWatchTab()
         }
-        viewModel.load()
     }
 
     override fun pageDidAppear() {

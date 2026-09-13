@@ -7,7 +7,6 @@
   "license": "",
   "dependencies": {
     "@kuikly-open/render": "2.26.0",
-    "@kuiklybase/kuikly-kline-chart-ohos": "file:../KuiklyKLineChart/KuiklyKLineChartOhos",
     "libentry.so": "file:./src/main/cpp/types/libentry"
   }
 }

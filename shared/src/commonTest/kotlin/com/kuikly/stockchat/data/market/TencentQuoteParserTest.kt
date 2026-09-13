@@ -1,7 +1,9 @@
 package com.kuikly.stockchat.data.market
 
+import com.kuikly.stockchat.data.network.unwrapNetworkText
 import com.kuikly.stockchat.domain.model.KLinePeriod
 import com.kuikly.stockchat.domain.model.StockCatalog
+import com.tencent.kuikly.core.nvi.serialization.json.JSONObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -52,5 +54,68 @@ class TencentQuoteParserTest {
         val quote = TencentMarketParser.parseQuote(StockCatalog.byd, fields!!)
         assertNotNull(quote)
         assertEquals(79.55, quote!!.price, 0.001)
+    }
+
+    @Test
+    fun hongKongQuotePrefersFullLineOverSimpleSPrefix() {
+        val raw = """
+            v_s_hk00700="100~腾讯控股~00700~428.400~2.800~0.66~15628379.0~6674835081.790~~38997.9436";
+            v_hk00700="100~腾讯控股~00700~428.400~425.600~419.400~15628379.0~0~0~428.400~0~0~0~0~0~0~0~0~0~428.400~0~0~0~0~0~0~0~0~0~15628379.0~2026/09/11 16:09:02~2.800~0.66~430.800~419.400~428.400~15628379.0~6674835081.790~0~15.67";
+        """.trimIndent()
+        val quote = TencentMarketParser.parseQuote(StockCatalog.tencent, TencentMarketParser.quoteFields(raw, StockCatalog.tencent)!!)
+        assertNotNull(quote)
+        assertEquals(428.4, quote!!.price, 0.05)
+        assertEquals(425.6, quote.prevClose, 0.05)
+        assertEquals(2.8, quote.change, 0.05)
+        assertEquals(0.66, quote.changePct, 0.05)
+    }
+
+    @Test
+    fun hongKongQuoteRecoversWhenLastPriceDropped() {
+        val shifted = listOf(
+            "100", "腾讯控股", "00700",
+            "425.600", "419.400", "15628379.0",
+            "0", "0", "428.400", "0", "0", "0", "0", "0", "0", "0", "0", "0", "428.400",
+            "0", "0", "0", "0", "0", "0", "0", "0", "0", "15628379.0",
+            "2026/09/11 16:09:02", "2.800", "0.66", "430.800", "419.400", "428.400",
+            "15628379.0", "6674835081.790", "0", "15.67",
+        )
+        val quote = TencentMarketParser.parseQuote(StockCatalog.tencent, shifted)
+        assertNotNull(quote)
+        assertEquals(428.4, quote!!.price, 0.05)
+        assertEquals(425.6, quote.prevClose, 0.05)
+        assertEquals(419.4, quote.open, 0.05)
+        assertEquals(2.8, quote.change, 0.05)
+        assertEquals(0.66, quote.changePct, 0.05)
+        assertEquals(6674835081.79, quote.turnover, 1.0)
+        assertTrue(quote.turnoverRate == null)
+    }
+
+    @Test
+    fun hongKongQuoteMergesGarbledNameTildes() {
+        val raw = """v_hk00700="100~腾~讯控股~00700~428.400~425.600~419.400~15628379.0~0~0~428.400~0~0~0~0~0~0~0~0~0~428.400~0~0~0~0~0~0~0~0~0~15628379.0~2026/09/11 16:09:02~2.800~0.66~430.800~419.400~428.400~15628379.0~6674835081.790~0~15.67";"""
+        val quote = TencentMarketParser.parseQuote(StockCatalog.tencent, TencentMarketParser.quoteFields(raw, StockCatalog.tencent)!!)
+        assertNotNull(quote)
+        assertEquals(428.4, quote!!.price, 0.05)
+        assertEquals(0.66, quote.changePct, 0.05)
+    }
+
+    @Test
+    fun quoteFieldsSurviveJsonWrapperWithExtraKeys() {
+        val raw = """{"data":"v_hk00700=\"100~腾讯控股~00700~428.400~425.600~419.400~1~0~0~428.400~0~0~0~0~0~0~0~0~0~428.400~0~0~0~0~0~0~0~0~0~1~2026/09/11 16:09:02~2.800~0.66~430.800~419.400~428.400~1~6674835081.790~0~15.67\";","httpCode":200}"""
+        val quote = TencentMarketParser.parseQuote(StockCatalog.tencent, TencentMarketParser.quoteFields(raw, StockCatalog.tencent)!!)
+        assertNotNull(quote)
+        assertEquals(428.4, quote!!.price, 0.05)
+    }
+
+    @Test
+    fun networkUnwrapKeepsPlainQuoteWhenExtraKeysPresent() {
+        val json = JSONObject().apply {
+            put("data", """v_hk00700="100~腾讯控股~00700~428.400~425.600";""")
+            put("httpCode", 200)
+        }
+        val text = unwrapNetworkText(json)
+        assertTrue(text.startsWith("v_hk00700="))
+        assertFalse(text.startsWith("{"))
     }
 }

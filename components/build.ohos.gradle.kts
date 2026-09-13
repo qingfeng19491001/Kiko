@@ -17,7 +17,7 @@ kotlin {
             dependencies {
                 implementation("com.tencent.kuikly-open:core:${Version.getKuiklyOhosVersion()}")
                 implementation("com.tencent.kuiklybase:KuiklyMarkdown:1.0.6-2.0.21-ohos")
-                implementation("io.github.qingfeng19491001:kuiklyklinechart:0.1.0-2.0.21-KBA-010")
+                api("io.github.qingfeng19491001:kuiklyklinechart:0.1.0-2.0.21-KBA-010")
                 // KuiklyMarkdown ohosArm64 依赖 serialization；官方 kotlinx 无 ohos klib，需 KBA 分支
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.7.1-KBA-003")
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.1-KBA-003")
