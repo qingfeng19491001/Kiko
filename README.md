@@ -16,11 +16,9 @@ Kiko 是面向股票行情与 AI 问答的跨端应用。业务与界面写在�
 
 ### 自选页
 
-| Android | 鸿蒙 |
-| :---: | :---: |
-| <img src="docs/preview/android-watch.jpg" width="220" alt="Android 自选页" /> | <img src="docs/preview/ohos-watch.jpg" width="220" alt="鸿蒙自选页" /> |
-
-iOS 自选与上表同一套 `MarketList` 顶栏 Tab（点「自选」即可），界面与 Android / 鸿蒙一致。
+| Android | iOS | 鸿蒙 |
+| :---: | :---: | :---: |
+| <img src="docs/preview/android-watch.jpg" width="220" alt="Android 自选页" /> | <img src="docs/preview/ios-watch.jpg" width="220" alt="iOS 自选页" /> | <img src="docs/preview/ohos-watch.jpg" width="220" alt="鸿蒙自选页" /> |
 
 ### AI 问答页
 
