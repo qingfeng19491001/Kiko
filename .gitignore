@@ -8,6 +8,9 @@ local.properties
 
 # local AI / notes
 .workbuddy/
+.superpowers/
+docs/superpowers/
+REPORT.md
 
 # local secrets (copy from AiSecrets.kt.example)
 shared/src/commonMain/kotlin/com/kuikly/stockchat/data/ai/AiSecrets.kt
