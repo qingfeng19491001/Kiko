@@ -1,12 +1,16 @@
 package com.kuikly.stockchat.ui.components.charts
 
 import com.kuikly.stockchat.domain.analysis.AnalysisEngine
+import com.kuikly.stockchat.domain.chat.ChartHitIndex
+import com.kuikly.stockchat.domain.chat.ChartSeries
+import com.kuikly.stockchat.domain.chat.SeriesChartKind
 import com.kuikly.stockchat.domain.model.IntradaySeries
 import com.kuikly.stockchat.domain.model.KLineBar
 import com.kuikly.stockchat.domain.util.NumberFormat
 import com.kuikly.stockchat.ui.theme.AppTheme
 import com.tencent.kuikly.core.base.Color
 import com.tencent.kuikly.core.base.ViewContainer
+import com.tencent.kuikly.core.base.event.Event
 import com.tencent.kuikly.core.views.Canvas
 import com.tencent.kuikly.core.views.CanvasContext
 import com.tencent.kuikly.core.views.TextAlign
@@ -56,11 +60,16 @@ fun ViewContainer<*, *>.CandleChart(
     showVolume: Boolean = true,
     showMa: Boolean = true,
     showAxis: Boolean = true,
+    selectedIndex: Int = -1,
+    onSelectIndex: ((Int) -> Unit)? = null,
 ) {
     Canvas({
         attr { size(width, height) }
+        event {
+            onSelectIndex?.let { handler -> bindChartHit(bars.size, width, 46f, handler) }
+        }
     }) { ctx, w, h ->
-        ChartPainter.candles(ctx, bars, w, h, showVolume, showMa, showAxis)
+        ChartPainter.candles(ctx, bars, w, h, showVolume, showMa, showAxis, selectedIndex)
     }
 }
 
@@ -72,12 +81,49 @@ fun ViewContainer<*, *>.BarChart(
     width: Float,
     height: Float,
     unit: String = "",
+    selectedIndex: Int = -1,
+    onSelectIndex: ((Int) -> Unit)? = null,
 ) {
     Canvas({
         attr { size(width, height) }
+        event {
+            onSelectIndex?.let { handler -> bindChartHit(entries.size, width, 44f, handler) }
+        }
     }) { ctx, w, h ->
-        ChartPainter.bar(ctx, entries, w, h, unit)
+        ChartPainter.bar(ctx, entries, w, h, unit, selectedIndex)
     }
+}
+
+fun ViewContainer<*, *>.SeriesChart(
+    kind: SeriesChartKind,
+    categories: List<String>,
+    series: List<ChartSeries>,
+    width: Float,
+    height: Float,
+    unit: String = "",
+    selectedIndex: Int = -1,
+    onSelectIndex: ((Int) -> Unit)? = null,
+) {
+    Canvas({
+        attr { size(width, height) }
+        event {
+            onSelectIndex?.let { handler -> bindChartHit(categories.size, width, 46f, handler) }
+        }
+    }) { ctx, w, h ->
+        when (kind) {
+            SeriesChartKind.LINE -> ChartPainter.multiLine(ctx, categories, series, w, h, unit, selectedIndex)
+            SeriesChartKind.GROUPED_BAR -> ChartPainter.groupedBar(ctx, categories, series, w, h, unit, selectedIndex)
+        }
+    }
+}
+
+private fun Event.bindChartHit(count: Int, width: Float, rightPad: Float, onSelect: (Int) -> Unit) {
+    fun hit(x: Float) {
+        val index = ChartHitIndex.at(x, count, width, rightPad)
+        if (index >= 0) onSelect(index)
+    }
+    click { hit(it.x) }
+    pan { hit(it.x) }
 }
 
 /**
@@ -111,6 +157,7 @@ object ChartPainter {
         w: Float,
         h: Float,
         unit: String = "",
+        selectedIndex: Int = -1,
     ) {
         if (entries.isEmpty()) return
         val rightPad = 44f
@@ -157,6 +204,15 @@ object ChartPainter {
             } else {
                 fillRect(ctx, x, zeroY, barW, barH)
             }
+        }
+
+        if (selectedIndex in entries.indices) {
+            val x = slot * selectedIndex + slot / 2
+            ctx.strokeStyle(Color(0x66191919L))
+            ctx.lineWidth(1f)
+            ctx.setLineDash(listOf(3f, 3f))
+            ctx.beginPath(); ctx.moveTo(x, topPad); ctx.lineTo(x, topPad + plotH); ctx.stroke()
+            ctx.setLineDash(emptyList())
         }
 
         // X 轴标签
@@ -337,7 +393,16 @@ object ChartPainter {
         else -> 391
     }
 
-    fun candles(ctx: CanvasContext, bars: List<KLineBar>, w: Float, h: Float, showVolume: Boolean, showMa: Boolean, showAxis: Boolean) {
+    fun candles(
+        ctx: CanvasContext,
+        bars: List<KLineBar>,
+        w: Float,
+        h: Float,
+        showVolume: Boolean,
+        showMa: Boolean,
+        showAxis: Boolean,
+        selectedIndex: Int = -1,
+    ) {
         if (bars.isEmpty()) return
         val rightPad = if (showAxis) 46f else 0f
         val topPad = if (showMa) 16f else 4f
@@ -390,6 +455,18 @@ object ChartPainter {
             fillRect(ctx, x - bodyW / 2, top, bodyW, bodyH)
         }
 
+        if (selectedIndex in bars.indices) {
+            val x = cx(selectedIndex)
+            ctx.strokeStyle(Color(0x66191919L))
+            ctx.lineWidth(1f)
+            ctx.setLineDash(listOf(3f, 3f))
+            ctx.beginPath()
+            ctx.moveTo(x, topPad)
+            ctx.lineTo(x, topPad + priceH)
+            ctx.stroke()
+            ctx.setLineDash(emptyList())
+        }
+
         // 均线
         if (showMa) {
             drawSeries(ctx, ma5, ma5Color, ::cx, ::py)
@@ -434,6 +511,145 @@ object ChartPainter {
             }
             ctx.textAlign(TextAlign.RIGHT)
             ctx.fillText(shortDate(bars.last().date), plotW, y)
+        }
+    }
+
+    fun multiLine(
+        ctx: CanvasContext,
+        categories: List<String>,
+        series: List<ChartSeries>,
+        w: Float,
+        h: Float,
+        unit: String,
+        selectedIndex: Int,
+    ) {
+        if (categories.isEmpty() || series.isEmpty()) return
+        val rightPad = 46f
+        val topPad = 16f
+        val bottomPad = 22f
+        val plotW = w - rightPad
+        val plotH = h - topPad - bottomPad
+        val values = series.flatMap { it.values }.filterNotNull()
+        if (values.isEmpty()) return
+        var maxV = values.max()
+        var minV = values.min()
+        if (maxV == minV) {
+            maxV += 1
+            minV -= 1
+        }
+        val range = maxV - minV
+        val slot = plotW / categories.size
+        fun cx(i: Int) = slot * i + slot / 2
+        fun py(v: Double) = topPad + ((maxV - v) / range * plotH).toFloat()
+
+        ctx.lineWidth(0.8f)
+        ctx.strokeStyle(gridLine)
+        ctx.font(10f, "")
+        ctx.textAlign(TextAlign.LEFT)
+        for (i in 0..4) {
+            val y = topPad + plotH * i / 4
+            ctx.beginPath(); ctx.moveTo(0f, y); ctx.lineTo(plotW, y); ctx.stroke()
+            ctx.fillStyle(axisText)
+            val valAtY = maxV - range * i / 4
+            ctx.fillText(NumberFormat.fixed(valAtY, 1) + unit, plotW + 4f, y + (if (i == 0) 10f else if (i == 4) -2f else 4f))
+        }
+
+        series.forEach { line ->
+            drawSeries(ctx, line.values, Color(line.colorArgb), ::cx, ::py)
+        }
+
+        if (selectedIndex in categories.indices) {
+            val x = cx(selectedIndex)
+            ctx.strokeStyle(Color(0x66191919L))
+            ctx.lineWidth(1f)
+            ctx.setLineDash(listOf(3f, 3f))
+            ctx.beginPath(); ctx.moveTo(x, topPad); ctx.lineTo(x, topPad + plotH); ctx.stroke()
+            ctx.setLineDash(emptyList())
+            series.forEach { line ->
+                val v = line.values.getOrNull(selectedIndex) ?: return@forEach
+                ctx.fillStyle(Color(line.colorArgb))
+                val px = cx(selectedIndex)
+                val y = py(v)
+                ctx.beginPath()
+                ctx.arc(px, y, 3.5f, 0f, (2 * PI).toFloat(), false)
+                ctx.fill()
+            }
+        }
+
+        ctx.fillStyle(axisText)
+        ctx.font(10f, "")
+        ctx.textAlign(TextAlign.LEFT)
+        ctx.fillText(categories.first(), 0f, h - 6f)
+        if (categories.size > 2) {
+            ctx.textAlign(TextAlign.CENTER)
+            ctx.fillText(categories[categories.size / 2], plotW / 2, h - 6f)
+        }
+        ctx.textAlign(TextAlign.RIGHT)
+        ctx.fillText(categories.last(), plotW, h - 6f)
+    }
+
+    fun groupedBar(
+        ctx: CanvasContext,
+        categories: List<String>,
+        series: List<ChartSeries>,
+        w: Float,
+        h: Float,
+        unit: String,
+        selectedIndex: Int,
+    ) {
+        if (categories.isEmpty() || series.isEmpty()) return
+        val rightPad = 46f
+        val topPad = 8f
+        val bottomPad = 22f
+        val plotW = w - rightPad
+        val plotH = h - topPad - bottomPad
+        val values = series.flatMap { it.values }.filterNotNull()
+        if (values.isEmpty()) return
+        val maxAbs = values.maxOf { kotlin.math.abs(it) }.let { if (it <= 0) 1.0 else it } * 1.1
+        val zeroY = topPad + (plotH * 0.5f)
+        val slot = plotW / categories.size
+        val groupW = slot * 0.78f
+        val barW = max(2f, groupW / series.size)
+
+        ctx.lineWidth(0.8f)
+        ctx.strokeStyle(gridLine)
+        ctx.font(10f, "")
+        ctx.textAlign(TextAlign.LEFT)
+        for (i in 0..4) {
+            val y = topPad + plotH * i / 4
+            ctx.beginPath(); ctx.moveTo(0f, y); ctx.lineTo(plotW, y); ctx.stroke()
+            ctx.fillStyle(axisText)
+            val valAtY = maxAbs * (1 - 2.0 * i / 4)
+            ctx.fillText(NumberFormat.fixed(valAtY, 1) + unit, plotW + 4f, y + (if (i == 0) 10f else if (i == 4) -2f else 4f))
+        }
+        ctx.strokeStyle(Color(0xFFCCD2DEL))
+        ctx.lineWidth(1f)
+        ctx.beginPath(); ctx.moveTo(0f, zeroY); ctx.lineTo(plotW, zeroY); ctx.stroke()
+
+        categories.forEachIndexed { i, _ ->
+            series.forEachIndexed { j, line ->
+                val v = line.values.getOrNull(i) ?: return@forEachIndexed
+                val x = slot * i + (slot - groupW) / 2 + j * barW
+                val barH = (kotlin.math.abs(v) / maxAbs * plotH / 2).toFloat()
+                ctx.fillStyle(Color(line.colorArgb))
+                if (v >= 0) fillRect(ctx, x, zeroY - barH, barW - 1f, barH)
+                else fillRect(ctx, x, zeroY, barW - 1f, barH)
+            }
+        }
+
+        if (selectedIndex in categories.indices) {
+            val x = slot * selectedIndex + slot / 2
+            ctx.strokeStyle(Color(0x66191919L))
+            ctx.lineWidth(1f)
+            ctx.setLineDash(listOf(3f, 3f))
+            ctx.beginPath(); ctx.moveTo(x, topPad); ctx.lineTo(x, topPad + plotH); ctx.stroke()
+            ctx.setLineDash(emptyList())
+        }
+
+        ctx.fillStyle(axisText)
+        ctx.textAlign(TextAlign.CENTER)
+        categories.forEachIndexed { i, label ->
+            ctx.fillText(label, slot * i + slot / 2, h - 6f)
         }
     }
 

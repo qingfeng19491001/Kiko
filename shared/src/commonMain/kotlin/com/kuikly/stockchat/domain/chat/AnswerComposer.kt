@@ -12,6 +12,7 @@ import com.kuikly.stockchat.domain.model.LimitUpLadderData
 import com.kuikly.stockchat.domain.model.Market
 import com.kuikly.stockchat.domain.model.MarketBreadthData
 import com.kuikly.stockchat.domain.model.MarketSnapshot
+import com.kuikly.stockchat.domain.model.PeerUniverse
 import com.kuikly.stockchat.domain.model.Quote
 import com.kuikly.stockchat.domain.model.StockCatalog
 import com.kuikly.stockchat.domain.util.NumberFormat
@@ -28,7 +29,7 @@ object AnswerComposer {
             Intent.STOCK_ANALYSIS -> snapshots.firstOrNull()?.let { stockAnalysis(it, snapshots.getOrNull(1)) } ?: fallback(parsed)
             Intent.TREND -> snapshots.firstOrNull()?.let { trend(it) } ?: fallback(parsed)
             Intent.RISK -> snapshots.firstOrNull()?.let { risk(it) } ?: generalRisk()
-            Intent.COMPARE -> if (snapshots.size >= 2) compare(snapshots[0], snapshots[1]) else snapshots.firstOrNull()?.let { stockAnalysis(it, null) } ?: fallback(parsed)
+            Intent.COMPARE -> if (snapshots.size >= 2) compare(snapshots) else snapshots.firstOrNull()?.let { trend(it) } ?: fallback(parsed)
             Intent.MARKET_OVERVIEW -> snapshots.firstOrNull()?.let { marketOverview(it, snapshots.drop(1), derived.breadth) } ?: fallback(parsed)
             Intent.LIMIT_UP_LADDER -> limitUpLadder(derived.ladder)
             Intent.CAPITAL_FLOW -> capitalFlow(derived.flow, snapshots.firstOrNull())
@@ -46,31 +47,40 @@ object AnswerComposer {
         val analysis = AnalysisEngine.analyze(snapshot)
         val blocks = mutableListOf<AnswerBlock>()
 
-        blocks += AnswerBlock.Markdown("好的，以下是 **${ins.name}**（${ins.displayCode}）的最新分析：")
+        blocks += AnswerBlock.Markdown("好的，以下是 **${ins.name}**（${ins.displayCode}）的完整诊股：")
         blocks += AnswerBlock.SectionHeader(1, "盘面概览")
         blocks += AnswerBlock.Markdown(overviewNarrative(snapshot, analysis))
-        blocks += AnswerBlock.StockCard(quote, snapshot.sparkline, analysis)
-        gaugeBlock(analysis)?.let { blocks += it }
-        blocks += AnswerBlock.SectionHeader(2, "技术面")
-        blocks += AnswerBlock.Markdown(technicalNarrative(snapshot, analysis))
-        if (snapshot.dailyBars.size >= 20) {
+        if (analysis.tags.isNotEmpty()) {
+            blocks += AnswerBlock.Tags(analysis.tags)
+        }
+        if (!quote.isMock) {
+            blocks += AnswerBlock.StockCard(quote, snapshot.sparkline, analysis)
+            gaugeBlock(analysis)?.let { blocks += it }
+        }
+        if (snapshot.hasLiveHistory(20)) {
             blocks += AnswerBlock.ChartCard(
                 title = "${ins.name} 日K",
-                subtitle = "近 60 个交易日 · MA5 / MA10 / MA20",
+                subtitle = "近 60 个交易日 · 点图读 OHLC，详情页再深读",
                 bars = snapshot.dailyBars.takeLast(60),
                 instrumentKey = ins.key,
             )
         }
-        keyLevelsBlock(quote.price, analysis)?.let { blocks += it }
-        recentChangeBars(snapshot)?.let { bars ->
-            blocks += AnswerBlock.BarChartCard("近 ${bars.size} 日涨跌幅", "单日涨跌幅", bars, "%")
+        blocks += AnswerBlock.SectionHeader(2, "技术面")
+        blocks += AnswerBlock.Markdown(technicalNarrative(snapshot, analysis))
+        if (!quote.isMock) {
+            keyLevelsBlock(quote.price, analysis)?.let { blocks += it }
+        }
+        if (snapshot.hasLiveHistory(3)) {
+            recentChangeBars(snapshot)?.let { bars ->
+                blocks += AnswerBlock.BarChartCard("近 ${bars.size} 日涨跌幅", "单日涨跌幅", bars, "%")
+            }
         }
         var section = 3
         if (!ins.isIndex) {
             blocks += AnswerBlock.SectionHeader(section++, "估值与规模")
             blocks += AnswerBlock.Markdown(valuationNarrative(snapshot))
         }
-        if (peer != null) {
+        if (peer != null && !peer.quote.isMock) {
             blocks += AnswerBlock.CompareCard(
                 title = "${ins.name} vs ${peer.quote.instrument.name}（${peer.quote.instrument.displayCode}）",
                 leftName = ins.name,
@@ -83,14 +93,8 @@ object AnswerComposer {
         blocks += AnswerBlock.SectionHeader(section, "核心结论")
         blocks += AnswerBlock.SummaryCallout(summaryComment(ins, analysis))
         blocks += AnswerBlock.Risk("风险提醒", riskBody(snapshot, analysis))
-        blocks += AnswerBlock.FollowUps(
-            listOf(
-                "${ins.name}的趋势判断",
-                "${ins.name}有哪些风险",
-                if (peer != null) "${ins.name} vs ${peer.quote.instrument.name} 哪个更值得关注" else "${ins.name}的估值贵吗",
-            ),
-        )
-        return AiAnswer(Intent.STOCK_ANALYSIS, blocks, listOfNotNull(snapshot, peer))
+        blocks += AnswerBlock.FollowUps(analysisFollowUps(snapshot, peer))
+        return AiAnswer(Intent.STOCK_ANALYSIS, blocks, listOfNotNull(snapshot, peer).filter { !it.quote.isMock })
     }
 
     /** 技术面评分仪表盘（数据不足时不展示） */
@@ -100,7 +104,7 @@ object AnswerComposer {
             title = "技术面评分",
             value = a.score.toFloat(),
             label = a.shortTermTrend.label,
-            description = "综合均线排列、RSI 动能与区间位置，评分越高技术面越强",
+            description = "短线${a.shortTermTrend.label}，后市先看 ${NumberFormat.price(a.resistance)} 能否站上",
         )
     }
 
@@ -144,10 +148,9 @@ object AnswerComposer {
         val q = snapshot.quote
         val sb = StringBuilder()
         if (a.hasEnoughData) {
-            sb.appendLine("- 均线：MA5 ${NumberFormat.price(a.ma5)} / MA10 ${NumberFormat.price(a.ma10)} / MA20 ${NumberFormat.price(a.ma20)}，${maComment(q.price, a)}")
-            a.rsi14?.let { sb.appendLine("- RSI(14) 为 **${NumberFormat.fixed(it, 1)}**，${rsiComment(it)}") }
-            sb.appendLine("- 近 20 日区间 **${NumberFormat.price(a.support)} ~ ${NumberFormat.price(a.resistance)}**，${rangeComment(q.price, a)}")
-            a.change20dPct?.let { sb.append("- 近 5 日 ${NumberFormat.signedPct(a.change5dPct)}，近 20 日 ${NumberFormat.signedPct(it)}，中期${a.midTermTrend.label}") }
+            sb.appendLine("- ${maComment(q.price, a)}")
+            a.rsi14?.let { sb.appendLine("- ${rsiComment(it)}") }
+            sb.append("- ${rangeComment(q.price, a)}")
         } else {
             sb.append("- 历史数据不足，暂不提供均线与区间判断")
         }
@@ -203,9 +206,9 @@ object AnswerComposer {
         if (resistance <= support) return ""
         val pos = (price - support) / (resistance - support)
         return when {
-            pos >= 0.9 -> "现价贴近区间上沿，**${NumberFormat.price(resistance)}** 附近压力明显，突破需成交量配合。"
-            pos <= 0.15 -> "现价靠近区间下沿，**${NumberFormat.price(support)}** 是关键支撑，跌破则趋势转弱。"
-            else -> "现价位于区间中部，上方压力 ${NumberFormat.price(resistance)}，下方支撑 ${NumberFormat.price(support)}。"
+            pos >= 0.9 -> "现价贴近近 20 日区间上沿，突破需要量能配合。"
+            pos <= 0.15 -> "现价靠近近 20 日区间下沿，跌破则趋势转弱。"
+            else -> "现价位于近 20 日波动区间中部，适合按上下沿应对。"
         }
     }
 
@@ -259,34 +262,73 @@ object AnswerComposer {
         val q = snapshot.quote
         val ins = q.instrument
         val a = AnalysisEngine.analyze(snapshot)
+        val peerName = PeerUniverse.peersOf(ins, 1).firstOrNull()?.name
         val blocks = mutableListOf<AnswerBlock>()
-        blocks += AnswerBlock.Markdown("我基于**${ins.name}**近 60 个交易日的日 K 数据，从均线、动能、区间三个维度做了趋势判断：")
-        val sb = StringBuilder()
-        sb.appendLine("- **短期（1~2 周）：${a.shortTermTrend.label}**。${maComment(q.price, a)}")
-        sb.appendLine("- **中期（1~3 月）：${a.midTermTrend.label}**。近 20 日累计 ${NumberFormat.signedPct(a.change20dPct)}" + (a.ma60?.let { "，MA60 位于 ${NumberFormat.price(it)}，${if (q.price > it) "股价在其上方运行" else "股价仍在其下方"}" } ?: "") + "。")
-        a.rsi14?.let { sb.appendLine("- **动能**：RSI(14) ${NumberFormat.fixed(it, 1)}，${rsiComment(it)}") }
-        blocks += AnswerBlock.SectionHeader(1, "趋势结论")
-        blocks += AnswerBlock.Markdown(sb.toString().trimEnd())
-        blocks += AnswerBlock.ChartCard(
-            title = "${ins.name} 日K",
-            subtitle = "MA5 / MA10 / MA20 · 前复权",
-            bars = snapshot.dailyBars.takeLast(60),
-            instrumentKey = ins.key,
-        )
-        blocks += AnswerBlock.Tags(a.tags)
-        gaugeBlock(a)?.let { blocks += it }
-        blocks += AnswerBlock.SectionHeader(2, "关键价位")
-        keyLevelsBlock(q.price, a)?.let { blocks += it }
-        recentChangeBars(snapshot)?.let { bars ->
-            blocks += AnswerBlock.BarChartCard("近 ${bars.size} 日涨跌幅", "单日涨跌幅", bars, "%")
+        blocks += AnswerBlock.SummaryCallout(trendCallout(ins, a))
+        if (a.tags.isNotEmpty()) {
+            blocks += AnswerBlock.Tags(a.tags)
         }
-        blocks += AnswerBlock.SummaryCallout(
-            "${ins.name}短期${a.shortTermTrend.label}、中期${a.midTermTrend.label}，" +
-                "主要博弈区间 ${NumberFormat.price(a.support)} ~ ${NumberFormat.price(a.resistance)}。" +
-                "趋势判断基于历史价格统计，不构成投资建议。",
-        )
-        blocks += AnswerBlock.FollowUps(listOf("${ins.name}后市如何", "${ins.name}有哪些风险", "什么是均线"))
+        if (snapshot.hasLiveHistory(20)) {
+            blocks += AnswerBlock.ChartCard(
+                title = "${ins.name} 日K",
+                subtitle = "点图读 OHLC · 详情页再深读",
+                bars = snapshot.dailyBars.takeLast(60),
+                instrumentKey = ins.key,
+            )
+        }
+        twoKeyLevels(a)?.let { blocks += it }
+        blocks += AnswerBlock.Risk("风险提醒", riskBody(snapshot, a))
+        blocks += AnswerBlock.FollowUps(trendFollowUps(snapshot, peerName))
         return AiAnswer(Intent.TREND, blocks, listOf(snapshot))
+    }
+
+    private fun trendCallout(ins: Instrument, a: TechnicalAnalysis): String {
+        val strength = when {
+            a.score >= 65 -> "偏强"
+            a.score <= 38 -> "偏弱"
+            else -> "中性整理"
+        }
+        return "${ins.name}短期${a.shortTermTrend.label}、中期${a.midTermTrend.label}，技术面$strength。" +
+            "${maCommentForTrend(a)}后市按区间应对，不追涨杀跌。"
+    }
+
+    private fun maCommentForTrend(a: TechnicalAnalysis): String {
+        val ma5 = a.ma5 ?: return ""
+        val ma20 = a.ma20 ?: return ""
+        return when {
+            ma5 > ma20 -> "短均线在中期均线之上，"
+            ma5 < ma20 -> "短均线仍在中期均线之下，"
+            else -> "短中期均线纠结，"
+        }
+    }
+
+    private fun twoKeyLevels(a: TechnicalAnalysis): AnswerBlock.KeyLevelsCard? {
+        val levels = mutableListOf<KeyLevel>()
+        a.resistance?.let { levels += KeyLevel("压力", NumberFormat.price(it), "近 20 日最高，站上才打开空间", TagTone.NEGATIVE) }
+        a.support?.let { levels += KeyLevel("支撑", NumberFormat.price(it), "近 20 日最低，失守则转弱", TagTone.POSITIVE) }
+        return if (levels.isEmpty()) null else AnswerBlock.KeyLevelsCard("关键价位", levels)
+    }
+
+    private fun trendFollowUps(snapshot: MarketSnapshot, peerName: String?): List<String> {
+        val ins = snapshot.quote.instrument
+        val last = snapshot.dailyBars.lastOrNull()
+        return listOfNotNull(
+            last?.let { "${ins.name} ${it.date.take(10)} 这一根怎么看" },
+            "${ins.name}有哪些风险",
+            peerName?.let { "对比${it}近20日涨跌" },
+        ).distinct().take(3)
+    }
+
+    private fun analysisFollowUps(snapshot: MarketSnapshot, peer: MarketSnapshot?): List<String> {
+        val ins = snapshot.quote.instrument
+        val last = snapshot.dailyBars.lastOrNull()
+        val catalogPeer = peer?.quote?.instrument?.name
+            ?: PeerUniverse.peersOf(ins, 1).firstOrNull()?.name
+        return listOfNotNull(
+            last?.let { "${ins.name} ${it.date.take(10)} 这一根怎么看" },
+            catalogPeer?.let { "对比${it}近60日相对走势" },
+            "${ins.name}有哪些风险",
+        ).distinct().take(3)
     }
 
     // endregion
@@ -299,7 +341,12 @@ object AnswerComposer {
         val a = AnalysisEngine.analyze(snapshot)
         val blocks = mutableListOf<AnswerBlock>()
         blocks += AnswerBlock.Markdown("以下是 **${ins.name}**（${ins.displayCode}）当前需要关注的风险点，我按“价格 → 估值 → 行业”三层来梳理：")
-        blocks += AnswerBlock.StockCard(q, snapshot.sparkline, a)
+        if (a.tags.isNotEmpty()) {
+            blocks += AnswerBlock.Tags(a.tags)
+        }
+        if (!q.isMock) {
+            blocks += AnswerBlock.StockCard(q, snapshot.sparkline, a)
+        }
         val sb = StringBuilder()
         sb.appendLine("#### 1. 价格与波动风险")
         a.volatilityPct?.let { sb.appendLine("- 近 20 日年化波动率 **${NumberFormat.fixed(it, 0)}%**，${if (it > 35) "高于多数蓝筹，短线波动剧烈" else if (it > 22) "处于中等水平" else "相对温和"}") }
@@ -352,38 +399,50 @@ object AnswerComposer {
 
     // region 对比
 
-    private fun compare(left: MarketSnapshot, right: MarketSnapshot): AiAnswer {
-        val lq = left.quote
-        val rq = right.quote
-        val la = AnalysisEngine.analyze(left)
-        val ra = AnalysisEngine.analyze(right)
-        val blocks = mutableListOf<AnswerBlock>()
-        blocks += AnswerBlock.Markdown("下面把**${lq.instrument.name}**与**${rq.instrument.name}**放在同一张表里对比：")
-        blocks += AnswerBlock.CompareCard(
-            title = "${lq.instrument.name} vs ${rq.instrument.name}（${rq.instrument.displayCode}）",
-            leftName = lq.instrument.name,
-            rightName = rq.instrument.name,
-            rows = compareRows(lq, rq),
-            leftKey = lq.instrument.key,
-            rightKey = rq.instrument.key,
-        )
-        val sb = StringBuilder()
-        sb.appendLine("#### 对比解读")
-        sb.appendLine("- **涨跌表现**：${betterBy(lq, rq) { it.changePct }.let { "${it.instrument.name}今日相对更强（${NumberFormat.signedPct(it.changePct)}）" }}，近 20 日 ${lq.instrument.name} ${NumberFormat.signedPct(la.change20dPct)}，${rq.instrument.name} ${NumberFormat.signedPct(ra.change20dPct)}")
-        if (!lq.instrument.isIndex && !rq.instrument.isIndex) {
-            sb.appendLine("- **估值水平**：${lq.instrument.name} PE ${NumberFormat.ratio(lq.pe)} 倍，${rq.instrument.name} PE ${NumberFormat.ratio(rq.pe)} 倍，${cheaper(lq, rq)}")
-            sb.appendLine("- **规模**：总市值分别为 ${NumberFormat.capFromYi(lq.totalMarketCap)} 与 ${NumberFormat.capFromYi(rq.totalMarketCap)}" + if (lq.instrument.market != rq.instrument.market) "（币种不同，仅供量级参考）" else "")
+    private fun compare(snapshots: List<MarketSnapshot>): AiAnswer {
+        val live = snapshots.filter { !it.quote.isMock }
+        if (live.isEmpty()) {
+            return AiAnswer(
+                Intent.COMPARE,
+                listOf(AnswerBlock.Markdown("暂无可用的真实行情数据，无法完成同业对比。")),
+                emptyList(),
+            )
         }
-        sb.appendLine("- **技术面评分**：${lq.instrument.name} ${la.score} 分（${la.shortTermTrend.label}），${rq.instrument.name} ${ra.score} 分（${ra.shortTermTrend.label}）")
-        sb.appendLine()
-        sb.appendLine("#### 结论")
-        val winner = if (la.score >= ra.score) lq else rq
-        val loser = if (winner === lq) rq else lq
-        sb.append("从技术面看 **${winner.instrument.name}** 当前更占优；${loser.instrument.name}若能收复 MA20 则有望迎头赶上。两者所处行业不同，更适合作为组合中的互补配置而非二选一。")
-        blocks += AnswerBlock.Markdown(sb.toString())
-        blocks += AnswerBlock.Risk("风险提醒", "跨市场对比需注意币种、交易时段与会计准则差异；以上对比基于最新收盘数据，不构成投资建议。")
-        blocks += AnswerBlock.FollowUps(listOf("${lq.instrument.name}后市如何", "${rq.instrument.name}的趋势判断", "${lq.instrument.name}有哪些风险"))
-        return AiAnswer(Intent.COMPARE, blocks, listOf(left, right))
+        val blocks = mutableListOf<AnswerBlock>()
+        val highlights = PeerSeriesMapper.highlights(live)
+        blocks += AnswerBlock.SectionHeader(1, "同行格局", "先结论，后证据")
+        highlights.firstOrNull()?.let { blocks += AnswerBlock.SummaryCallout(it) }
+        blocks += AnswerBlock.SectionHeader(2, "行情与估值对比")
+        blocks += AnswerBlock.PeerTableCard(
+            title = "同业对比",
+            rows = live.map { peerRow(it.quote) },
+        )
+        blocks += AnswerBlock.SectionHeader(3, "阶段表现")
+        PeerSeriesMapper.monthlyReturns(live)?.let { blocks += it }
+        PeerSeriesMapper.indexedCloses(live)?.let { blocks += it }
+        if (highlights.size > 1) {
+            blocks += AnswerBlock.HighlightsCard(title = "关键差异", items = highlights.drop(1))
+        }
+        blocks += AnswerBlock.Risk(
+            "风险提醒",
+            "跨市场对比需注意币种、交易时段与会计准则差异；以上对比基于最新收盘与日 K，不编造未提供的财务科目，不构成投资建议。",
+        )
+        blocks += AnswerBlock.FollowUps(PeerSeriesMapper.followUps(live))
+        return AiAnswer(Intent.COMPARE, blocks, live)
+    }
+
+    private fun peerRow(q: Quote): PeerRow {
+        val ins = q.instrument
+        return PeerRow(
+            instrumentKey = ins.key,
+            name = ins.name,
+            price = NumberFormat.price(q.price),
+            changePct = NumberFormat.signedPct(q.changePct),
+            change = q.changePct,
+            turnover = NumberFormat.compact(q.turnover),
+            pe = if (ins.isIndex) "--" else NumberFormat.ratio(q.pe),
+            marketCap = if (ins.isIndex) "--" else NumberFormat.capFromYi(q.totalMarketCap ?: q.marketCap),
+        )
     }
 
     private inline fun betterBy(a: Quote, b: Quote, selector: (Quote) -> Double): Quote =
@@ -437,41 +496,52 @@ object AnswerComposer {
         sb.append("- 近 20 日波动区间 ${NumberFormat.price(a.support)} ~ ${NumberFormat.price(a.resistance)} 点，${rangeComment(q.price, a)}")
         blocks += AnswerBlock.SectionHeader(1, "盘面概览")
         blocks += AnswerBlock.Markdown(sb.toString())
-        blocks += AnswerBlock.StockCard(q, index.sparkline, a)
-        gaugeBlock(a)?.let { blocks += it }
-        blocks += AnswerBlock.MetricGrid(
-            listOf(
-                Metric("今开", NumberFormat.price(q.open)),
-                Metric("最高", NumberFormat.price(q.high), TagTone.POSITIVE),
-                Metric("最低", NumberFormat.price(q.low), TagTone.NEGATIVE),
-                Metric("成交额", NumberFormat.compact(q.turnover)),
-            ),
-        )
-        breadth?.let { b ->
-            val total = b.advancing + b.declining
-            val limitUpRate = if (total > 0) NumberFormat.fixed(b.limitUp * 100.0 / total, 2) + "%" else "--"
+        if (a.tags.isNotEmpty()) {
+            blocks += AnswerBlock.Tags(a.tags)
+        }
+        if (!q.isMock) {
+            blocks += AnswerBlock.StockCard(q, index.sparkline, a)
+            gaugeBlock(a)?.let { blocks += it }
+            blocks += AnswerBlock.MetricGrid(
+                listOf(
+                    Metric("今开", NumberFormat.price(q.open)),
+                    Metric("最高", NumberFormat.price(q.high), TagTone.POSITIVE),
+                    Metric("最低", NumberFormat.price(q.low), TagTone.NEGATIVE),
+                    Metric("成交额", NumberFormat.compact(q.turnover)),
+                ),
+            )
+        }
+        if (breadth != null) {
+            val total = breadth.advancing + breadth.declining
+            val limitUpRate = if (total > 0) NumberFormat.fixed(breadth.limitUp * 100.0 / total, 2) + "%" else "--"
             blocks += AnswerBlock.MarketBreadthCard(
-                title = "市场广度（A 股 · ${b.date.take(10)}）",
-                advancing = b.advancing,
-                declining = b.declining,
-                limitUp = b.limitUp,
-                limitDown = b.limitDown,
-                halted = b.halted,
+                title = "市场广度（A 股 · ${breadth.date.take(10)}）",
+                advancing = breadth.advancing,
+                declining = breadth.declining,
+                limitUp = breadth.limitUp,
+                limitDown = breadth.limitDown,
+                halted = breadth.halted,
                 limitUpRate = limitUpRate,
             )
+        } else {
+            blocks += AnswerBlock.Markdown("A 股涨跌家数等广度数据当前未接入，以下只基于指数本身的行情与技术面。")
         }
         blocks += AnswerBlock.SectionHeader(2, "短期展望")
         blocks += AnswerBlock.SummaryCallout(indexOutlook(ins, a))
-        recentChangeBars(index)?.let { bars ->
-            blocks += AnswerBlock.BarChartCard("近 ${bars.size} 日涨跌幅", "单日涨跌幅", bars, "%")
+        if (index.hasLiveHistory(3)) {
+            recentChangeBars(index)?.let { bars ->
+                blocks += AnswerBlock.BarChartCard("近 ${bars.size} 日涨跌幅", "单日涨跌幅", bars, "%")
+            }
         }
-        blocks += AnswerBlock.ChartCard("${ins.name} 日K", "近 60 个交易日 · MA5 / MA10 / MA20", index.dailyBars.takeLast(60), ins.key)
+        if (index.hasLiveHistory(20)) {
+            blocks += AnswerBlock.ChartCard("${ins.name} 日K", "近 60 个交易日 · MA5 / MA10 / MA20", index.dailyBars.takeLast(60), ins.key)
+        }
         blocks += AnswerBlock.Risk("风险提醒", "指数走势受宏观政策、海外流动性、汇率及地缘因素影响较大，短期判断存在不确定性，不构成投资建议。")
         val follow = mutableListOf("${ins.name}有哪些风险")
         if (ins.market == Market.HK) follow += listOf("腾讯控股后市如何", "港股科技板块趋势分析")
         else follow += listOf("贵州茅台后市如何", "宁德时代的趋势判断")
         blocks += AnswerBlock.FollowUps(follow.distinct().take(3))
-        return AiAnswer(Intent.MARKET_OVERVIEW, blocks, listOf(index) + others)
+        return AiAnswer(Intent.MARKET_OVERVIEW, blocks, (listOf(index) + others).filter { !it.quote.isMock })
     }
 
     private fun indexOutlook(ins: Instrument, a: TechnicalAnalysis): String = when (a.shortTermTrend) {
@@ -571,10 +641,9 @@ object AnswerComposer {
 
     /** 网关未启动 / 数据不可用时的统一降级回答 */
     private fun derivedUnavailable(intent: Intent, feature: String, followUps: List<String>): AiAnswer {
-        val md = "**${feature}数据暂不可用。**\n\n" +
-            "该功能依赖本地 AKShare 数据网关，请确认已启动：\n\n" +
-            "```\npython scripts/ak_gateway.py\n```\n\n" +
-            "启动后监听 `127.0.0.1:8790`，客户端会自动获取真实数据。"
+        val md = "**${feature}当前未接入。**\n\n" +
+            "连板梯队、资金流向等衍生数据来自独立市场接口，当前环境未连通，看起来会像功能坏了，其实是数据源未就绪。指数行情、个股诊股和日 K 不受影响。\n\n" +
+            "可以先看大盘或具体标的走势。"
         return AiAnswer(intent, listOf(AnswerBlock.Markdown(md), AnswerBlock.FollowUps(followUps)), emptyList())
     }
 
@@ -610,7 +679,21 @@ object AnswerComposer {
             |
             |目前支持港股、A 股与美股的主流标的，直接输入股票名称或代码即可开始。
         """.trimMargin()
-        return AiAnswer(Intent.GREETING, listOf(AnswerBlock.Markdown(md), AnswerBlock.FollowUps(KnowledgeBase.defaultFollowUps)))
+        return AiAnswer(
+            Intent.GREETING,
+            listOf(
+                AnswerBlock.Markdown(md),
+                AnswerBlock.FollowUps(
+                    listOf(
+                        "今天大盘怎么样？",
+                        "腾讯控股后市如何",
+                        "比亚迪 vs 特斯拉 对比",
+                        "贵州茅台资金流向怎么样",
+                        "连板梯队",
+                    ),
+                ),
+            ),
+        )
     }
 
     private fun fallback(parsed: ParsedIntent): AiAnswer {
@@ -657,3 +740,6 @@ object AnswerComposer {
 
     fun insightTags(analysis: TechnicalAnalysis): List<InsightTag> = analysis.tags
 }
+
+private fun MarketSnapshot.hasLiveHistory(minBars: Int): Boolean =
+    !quote.isMock && dailyBars.size >= minBars

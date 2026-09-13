@@ -26,6 +26,7 @@ data class ChatMessage(
     val createdAt: Long,
     val errorMessage: String = "",
     val attachments: List<Attachment> = emptyList(),
+    val researchReport: ResearchReport? = null,
 ) {
     val isUser: Boolean get() = role == Role.USER
 }
@@ -51,5 +52,7 @@ fun AnswerBlock.instrumentKeys(): List<String> = when (this) {
     is AnswerBlock.StockCard -> listOf(quote.instrument.key)
     is AnswerBlock.CompareCard -> listOf(leftKey, rightKey)
     is AnswerBlock.ChartCard -> listOf(instrumentKey)
+    is AnswerBlock.PeerTableCard -> rows.map { it.instrumentKey }
+    is AnswerBlock.SeriesChartCard -> series.map { it.instrumentKey }
     else -> emptyList()
 }

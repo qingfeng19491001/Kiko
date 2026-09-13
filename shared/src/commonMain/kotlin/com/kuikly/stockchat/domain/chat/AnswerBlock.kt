@@ -53,11 +53,13 @@ sealed class AnswerBlock {
     /** 追问建议 */
     data class FollowUps(val items: List<String>) : AnswerBlock()
 
-    /** 章节标题（序号徽标 + 标题 + 可选副标题） */
+    /** 章节标题（序号徽标 + 标题 + 可选副标题）。章节与图表一律展开，不再折叠。 */
     data class SectionHeader(
         val index: Int,
         val title: String,
         val subtitle: String = "",
+        /** 历史消息解码保留；渲染侧忽略，内容统一展开。 */
+        val collapsedByDefault: Boolean = false,
     ) : AnswerBlock()
 
     /** 核心结论高亮区（左侧色条 + 引言文本） */
@@ -110,6 +112,28 @@ sealed class AnswerBlock {
         val title: String,
         val flows: List<CapitalFlow>,
     ) : AnswerBlock()
+
+    /** 多标的同行表（行 = 公司，列 = 现价/涨跌/成交额/PE/市值） */
+    data class PeerTableCard(
+        val title: String,
+        val rows: List<PeerRow>,
+    ) : AnswerBlock()
+
+    /** 多序列折线 / 分组柱 */
+    data class SeriesChartCard(
+        val title: String,
+        val subtitle: String = "",
+        val unit: String = "",
+        val kind: SeriesChartKind,
+        val categories: List<String>,
+        val series: List<ChartSeries>,
+    ) : AnswerBlock()
+
+    /** 三条关键亮点 */
+    data class HighlightsCard(
+        val title: String = "关键亮点",
+        val items: List<String>,
+    ) : AnswerBlock()
 }
 
 data class BarEntry(
@@ -155,6 +179,26 @@ data class CompareRow(
 )
 
 data class Metric(val label: String, val value: String, val tone: TagTone = TagTone.NEUTRAL)
+
+data class PeerRow(
+    val instrumentKey: String,
+    val name: String,
+    val price: String,
+    val changePct: String,
+    val change: Double,
+    val turnover: String,
+    val pe: String,
+    val marketCap: String,
+)
+
+enum class SeriesChartKind { LINE, GROUPED_BAR }
+
+data class ChartSeries(
+    val name: String,
+    val instrumentKey: String,
+    val colorArgb: Long,
+    val values: List<Double?>,
+)
 
 /**
  * 一次完整的 AI 回答（用于生成后的持久化与渲染）。

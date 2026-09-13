@@ -112,7 +112,7 @@ object AnswerAssembler {
         return when {
             t.contains("技术") || t.contains("趋势") || t.contains("均线") -> SectionKey.Technical
             t.contains("估值") || t.contains("规模") || t.contains("基本面") -> SectionKey.Valuation
-            t.contains("结论") || t.contains("总结") || t.contains("要点") || t.contains("后市") || t.contains("展望") -> SectionKey.Conclusion
+            t.contains("结论") || t.contains("总结") || t.contains("要点") || t.contains("后市") || t.contains("展望") || t.contains("亮点") || t.contains("格局") -> SectionKey.Conclusion
             t.contains("风险") -> SectionKey.Risk
             t.contains("盘面") || t.contains("概览") || t.contains("行情") ||
                 t.contains("观点") || t.contains("核心") -> SectionKey.Overview
