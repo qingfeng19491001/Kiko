@@ -39,7 +39,7 @@ class AttachmentPromptBuilderTest {
             error = null,
         )
         val notes = AttachmentPromptBuilder.notes(listOf(loaded))
-        assertTrue(notes.contains("qwen-long"))
+        assertTrue(notes.contains("未能提取原文"))
         val content = AttachmentPromptBuilder.build("解读", listOf(loaded))
         assertTrue(content is UserContent.Text)
     }

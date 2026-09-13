@@ -7,10 +7,12 @@ import display from '@ohos.display';
 import { KuiklyRenderAdapterManager } from '@kuikly-open/render';
 import { LogAdapter } from '../kuikly/adapter/LogAdapter';
 import { RouterAdapter } from '../kuikly/adapter/RouterAdapter';
+import { common } from '@kit.AbilityKit';
 
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     hilog.info(0x0000, 'StockChat', 'Ability onCreate');
+    AppStorage.setOrCreate<common.UIAbilityContext>('abilityContext', this.context);
 
     // 冷启动直达：--ps pageName StockDetail
     const pageName = want.parameters?.['pageName'] as string;

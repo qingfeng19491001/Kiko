@@ -38,7 +38,7 @@ object AttachmentPromptBuilder {
                 item.attachment.kind == AttachmentKind.DOCUMENT && item.hasText ->
                     "附件「$name」文本摘录：\n${item.textExcerpt}"
                 item.attachment.kind == AttachmentKind.DOCUMENT ->
-                    "附件「$name」是文档，当前未走 qwen-long 文件上传，模型看不到原文。"
+                    "附件「$name」未能提取原文，模型看不到文档内容。"
                 item.hasImage -> null
                 else -> "附件「$name」未能编码为图片。"
             }

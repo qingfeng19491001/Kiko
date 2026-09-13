@@ -4,7 +4,7 @@
 //
 
 #import "AppDelegate.h"
-#import "ViewController.h"
+#import "KuiklyRenderViewController.h"
 
 @implementation AppDelegate
 
@@ -12,7 +12,8 @@
     self.window = [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
     self.window.backgroundColor = [UIColor whiteColor];
 
-    ViewController *root = [[ViewController alloc] init];
+    KuiklyRenderViewController *root = [[KuiklyRenderViewController alloc]
+        initWithPageName:@"MarketList" pageData:nil];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:root];
     nav.navigationBarHidden = YES;
 

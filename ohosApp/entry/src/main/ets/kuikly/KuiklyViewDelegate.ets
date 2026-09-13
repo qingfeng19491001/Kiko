@@ -4,19 +4,17 @@ import {
   KRRenderViewExportCreator
 } from '@kuikly-open/render';
 import { KRBridgeModule } from './modules/KRBridgeModule';
-import { KRKLineChart } from '@kuiklybase/kuikly-kline-chart-ohos';
+import { KRContentActionModule } from './modules/KRContentActionModule';
+import { KRAttachmentModule } from './modules/KRAttachmentModule';
+import { KRVoiceModule } from './modules/KRVoiceModule';
 
 /**
- * StockChat 鸿蒙端 View 委托：
- * - 不注册 KRKLineChart（stockchat 的 KLine 在 OHOS 不做 native 落点，
- *   业务侧可用 Kuikly 自带 Canvas/绘制组件折中）
- * - 仅注册通用 Bridge Module 供 Kotlin 侧调用（closePage/toast/log）
+ * StockChat 鸿蒙端 View 委托。
+ * KRKLineChart 的本地 HAR 尚未作为本工程模块接入，详情页 Full K 线先空着。
  */
 export class KuiklyViewDelegate extends IKuiklyViewDelegate {
   getCustomRenderViewCreatorRegisterMap(): Map<string, KRRenderViewExportCreator> {
-    const map: Map<string, KRRenderViewExportCreator> = new Map();
-    map.set(KRKLineChart.VIEW_NAME, () => new KRKLineChart());
-    return map;
+    return new Map();
   }
 
   getCustomRenderViewCreatorRegisterMapV2(): Map<string, KRRenderViewExportCreator> {
@@ -26,6 +24,9 @@ export class KuiklyViewDelegate extends IKuiklyViewDelegate {
   getCustomRenderModuleCreatorRegisterMap(): Map<string, KRRenderModuleExportCreator> {
     const map: Map<string, KRRenderModuleExportCreator> = new Map();
     map.set(KRBridgeModule.MODULE_NAME, () => new KRBridgeModule());
+    map.set(KRContentActionModule.MODULE_NAME, () => new KRContentActionModule());
+    map.set(KRAttachmentModule.MODULE_NAME, () => new KRAttachmentModule());
+    map.set(KRVoiceModule.MODULE_NAME, () => new KRVoiceModule());
     return map;
   }
 }
