@@ -5,6 +5,10 @@
       "value": "用于录入股票语音问题"
     },
     {
+      "name": "camera_permission_reason",
+      "value": "用于拍摄需要分析的图片"
+    },
+    {
       "name": "module_desc",
       "value": "module description"
     },
@@ -14,7 +18,7 @@
     },
     {
       "name": "EntryAbility_label",
-      "value": "kuiklydemo"
+      "value": "Kiko"
     }
   ]
 }

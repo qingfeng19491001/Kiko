@@ -5,12 +5,16 @@
       "value": "module description"
     },
     {
+      "name": "camera_permission_reason",
+      "value": "Used to capture images for analysis"
+    },
+    {
       "name": "EntryAbility_desc",
       "value": "description"
     },
     {
       "name": "EntryAbility_label",
-      "value": "kuiklydemo"
+      "value": "Kiko"
     }
   ]
 }

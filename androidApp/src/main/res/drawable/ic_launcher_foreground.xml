@@ -1,14 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <!-- 简化的 K 线走势图标 -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M30,66 L42,52 L52,60 L66,42 L78,50 L78,54 L66,48 L52,66 L42,58 L30,72 Z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M70,38 L80,38 L80,48 L76,48 L76,42 L70,42 Z" />
-</vector>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@android:color/transparent" />
+</shape>

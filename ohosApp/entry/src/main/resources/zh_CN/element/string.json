@@ -5,12 +5,16 @@
       "value": "模块描述"
     },
     {
+      "name": "camera_permission_reason",
+      "value": "用于拍摄需要分析的图片"
+    },
+    {
       "name": "EntryAbility_desc",
       "value": "description"
     },
     {
       "name": "EntryAbility_label",
-      "value": "kuiklydemo"
+      "value": "Kiko"
     }
   ]
 }
