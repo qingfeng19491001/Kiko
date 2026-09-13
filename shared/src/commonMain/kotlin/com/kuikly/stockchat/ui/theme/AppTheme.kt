@@ -35,7 +35,7 @@ object AppTheme {
     val purple = Color(0xFF6D28D9L)
     val purpleSoft = Color(0xFFF3EEFDL)
 
-    // 中性色（对齐 Kimi：整页近白，白控件靠轻阴影浮起，不要灰条分区）
+    // 中性色（整页近白，白控件靠轻阴影浮起）
     val background = Color.WHITE
     val drawerBackground = Color(0xFFF5F5F5L)
     val surface = Color.WHITE
@@ -57,7 +57,7 @@ object AppTheme {
     const val cardRadius = 12f
     const val bubbleRadius = 14f
     const val navBarHeight = 48f
-    const val composerHeight = 50f
+    const val composerHeight = 44f
 
     fun changeColor(change: Double): Color = when {
         change > 0 -> up

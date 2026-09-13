@@ -4,6 +4,7 @@ import com.kuikly.stockchat.data.ai.AiService
 import com.kuikly.stockchat.data.ai.AnswerListener
 import com.kuikly.stockchat.data.chat.ConversationRepository
 import com.kuikly.stockchat.data.chat.SettingsRepository
+import com.kuikly.stockchat.data.chat.WatchlistRepository
 import com.kuikly.stockchat.data.market.MarketRepository
 import com.kuikly.stockchat.domain.chat.AiAnswer
 import com.kuikly.stockchat.domain.chat.AnswerBlock
@@ -11,16 +12,19 @@ import com.kuikly.stockchat.domain.chat.Conversation
 import com.kuikly.stockchat.domain.chat.MessageStatus
 import com.kuikly.stockchat.domain.chat.ParsedIntent
 import com.kuikly.stockchat.domain.chat.Role
+import com.kuikly.stockchat.domain.chat.ResearchProgress
 import com.kuikly.stockchat.domain.chat.instrumentKeys
 import com.kuikly.stockchat.domain.model.Instrument
 import com.kuikly.stockchat.domain.model.InstrumentCache
 import com.kuikly.stockchat.domain.model.MarketSnapshot
 import com.kuikly.stockchat.domain.model.StockCatalog
+import com.kuikly.stockchat.data.attachment.AttachmentStore
 import com.kuikly.stockchat.domain.attachment.Attachment
 import com.kuikly.stockchat.domain.attachment.AttachmentRules
 import com.tencent.kuikly.core.datetime.DateTime
 import com.tencent.kuikly.core.reactive.handler.observable
 import com.tencent.kuikly.core.reactive.handler.observableList
+import com.tencent.kuikly.core.timer.setTimeout
 
 /**
  * 聊天页视图模型：持有响应式状态，编排 AI 服务与会话持久化。
@@ -31,6 +35,7 @@ class ChatViewModel(
     private val conversationRepository: ConversationRepository,
     private val settingsRepository: SettingsRepository,
     val marketRepository: MarketRepository,
+    private val watchlistRepository: WatchlistRepository? = null,
 ) {
     var messages by observableList<ChatUiMessage>()
     var conversations by observableList<Conversation>()
@@ -43,6 +48,12 @@ class ChatViewModel(
 
     /** 由页面注入的原生播报回调，避免 ViewModel 依赖具体平台实现。 */
     var onReplyCompleted: ((String) -> Unit)? = null
+
+    /** 删除会话或待发送附件后，清理不再被引用的本地文件。 */
+    var onPruneFiles: ((Set<String>) -> Unit)? = null
+
+    /** 重新生成前确认本地附件仍在。 */
+    var verifyAttachments: ((List<Attachment>, (Boolean) -> Unit) -> Unit)? = null
 
     /** 是否有消息（欢迎页 / 对话页切换） */
     var hasConversation by observable(false)
@@ -104,6 +115,12 @@ class ChatViewModel(
         ttsEnabled = enabled
         settingsRepository.setTtsEnabled(enabled)
     }
+
+    /** 详情页加入的自选，供投资记忆拼进提问。 */
+    fun watchlistNames(): List<String> =
+        watchlistRepository?.load().orEmpty().map { key ->
+            InstrumentCache.get(key)?.name ?: StockCatalog.findByKey(key)?.name ?: key
+        }
 
     /** 从其他页面改过存储后同步会话列表（例如设置页清空记录）。 */
     fun reloadConversationsFromStore() {
@@ -169,9 +186,10 @@ class ChatViewModel(
     }
 
     fun deleteConversation(id: String) {
-        conversationRepository.delete(id)
+        val deleted = conversationRepository.delete(id)
         conversations.removeAll { it.id == id }
         syncDrawerList()
+        deleted?.let { onPruneFiles?.invoke(AttachmentStore.orphanedAfterDelete(it, conversationRepository.loadAll())) }
         if (id == currentConversationId) {
             messages.clear()
             currentConversationId = ""
@@ -181,7 +199,7 @@ class ChatViewModel(
     }
 
     fun clearAllConversations() {
-        conversationRepository.clear()
+        val previous = conversationRepository.clear()
         conversations.clear()
         syncDrawerList()
         messages.clear()
@@ -189,6 +207,7 @@ class ChatViewModel(
         currentCreatedAt = 0L
         hasConversation = false
         showHistory = false
+        onPruneFiles?.invoke(AttachmentStore.referencedPaths(previous))
     }
 
     // endregion
@@ -216,6 +235,8 @@ class ChatViewModel(
         hasConversation = true
 
         val aiMessage = ChatUiMessage(nextId(), Role.ASSISTANT, "", now + 1, MessageStatus.THINKING)
+        val researchStartedAt = DateTime.currentTimestamp()
+        var researchFinished = false
         messages.add(aiMessage)
         isGenerating = true
         requestScrollToBottom()
@@ -225,19 +246,34 @@ class ChatViewModel(
             contextInstruments = contextInstruments(hintInstruments),
             attachments = sendAttachments,
             listener = object : AnswerListener {
+                override fun onProgress(progress: ResearchProgress) {
+                    aiMessage.updateResearch(progress)
+                    requestScrollToBottom()
+                }
+
                 override fun onThinking(parsed: ParsedIntent) {
                     aiMessage.intent = parsed.intent
                 }
 
                 override fun onBlock(index: Int, block: AnswerBlock) {
                     aiMessage.status = MessageStatus.STREAMING
+                    if (!researchFinished) {
+                        researchFinished = true
+                        aiMessage.completeResearch(DateTime.currentTimestamp() - researchStartedAt)
+                    }
                     aiMessage.appendCard(index, block)
+                    setTimeout(16) { aiMessage.revealBlock(index) }
                     requestScrollToBottom()
                 }
 
                 override fun onMarkdownStart(index: Int) {
                     aiMessage.status = MessageStatus.STREAMING
+                    if (!researchFinished) {
+                        researchFinished = true
+                        aiMessage.completeResearch(DateTime.currentTimestamp() - researchStartedAt)
+                    }
                     aiMessage.appendMarkdown(index)
+                    setTimeout(16) { aiMessage.revealBlock(index) }
                 }
 
                 override fun onMarkdownDelta(index: Int, text: String, finished: Boolean) {
@@ -248,6 +284,10 @@ class ChatViewModel(
 
                 override fun onComplete(answer: AiAnswer) {
                     aiMessage.status = MessageStatus.DONE
+                    if (!researchFinished) {
+                        researchFinished = true
+                        aiMessage.completeResearch(DateTime.currentTimestamp() - researchStartedAt)
+                    }
                     isGenerating = false
                     val snapshots = answer.relatedSnapshots
                     if (snapshots.isNotEmpty() && snapshots.all { it.quote.isMock }) {
@@ -267,6 +307,10 @@ class ChatViewModel(
                 override fun onError(message: String) {
                     aiMessage.status = MessageStatus.ERROR
                     aiMessage.errorMessage = message
+                    aiMessage.interruptResearch(
+                        "未完成 · 可查看已执行的研究步骤",
+                        DateTime.currentTimestamp() - researchStartedAt,
+                    )
                     isGenerating = false
                     persistCurrent()
                 }
@@ -281,7 +325,11 @@ class ChatViewModel(
     }
 
     fun removePendingAttachment(id: String) {
+        val removed = pendingAttachments.firstOrNull { it.id == id }
         pendingAttachments.removeAll { it.id == id }
+        removed?.let {
+            onPruneFiles?.invoke(setOfNotNull(it.localPath.takeIf { path -> path.isNotBlank() }, it.thumbnailPath))
+        }
     }
 
     fun stopGenerating() {
@@ -290,6 +338,7 @@ class ChatViewModel(
             if (msg.blocks.isEmpty()) {
                 msg.status = MessageStatus.ERROR
                 msg.errorMessage = "已停止生成"
+                msg.interruptResearch("已停止 · 尚未生成回答内容")
             } else {
                 msg.blocks.forEach { block ->
                     if (block is UiBlock.Markdown) {
@@ -298,6 +347,7 @@ class ChatViewModel(
                     }
                 }
                 msg.status = MessageStatus.DONE
+                msg.interruptResearch("已停止 · 保留已生成的部分内容")
             }
         }
         isGenerating = false
@@ -309,8 +359,22 @@ class ChatViewModel(
         if (isGenerating) return
         val lastUser = messages.lastOrNull { it.isUser } ?: return
         val lastIndex = messages.indexOfLast { it.isUser }
-        while (messages.size > lastIndex) messages.removeAt(messages.size - 1)
-        send(lastUser.text, lastUser.attachments)
+        val proceed = {
+            while (messages.size > lastIndex) messages.removeAt(messages.size - 1)
+            send(lastUser.text, lastUser.attachments)
+        }
+        val check = verifyAttachments
+        if (check != null && lastUser.attachments.isNotEmpty()) {
+            check(lastUser.attachments) { ok ->
+                if (!ok) {
+                    banner = "附件已失效，无法重新生成"
+                    return@check
+                }
+                proceed()
+            }
+        } else {
+            proceed()
+        }
     }
 
     // endregion
@@ -337,7 +401,10 @@ class ChatViewModel(
             updatedAt = DateTime.currentTimestamp(),
             messages = domainMessages,
         )
-        conversationRepository.save(conversation)
+        val pruned = conversationRepository.save(conversation)
+        if (pruned.isNotEmpty()) {
+            onPruneFiles?.invoke(AttachmentStore.orphanedAfterPrune(pruned, conversationRepository.loadAll()))
+        }
         conversations.removeAll { it.id == conversation.id }
         conversations.add(0, conversation)
         syncDrawerList()

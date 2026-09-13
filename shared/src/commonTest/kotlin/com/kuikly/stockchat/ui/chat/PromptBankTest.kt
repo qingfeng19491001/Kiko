@@ -1,5 +1,6 @@
 package com.kuikly.stockchat.ui.chat
 
+import com.kuikly.stockchat.ui.components.IconKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -11,9 +12,9 @@ class PromptBankTest {
     fun firstPageShowsOpeningWelcomeQuestions() {
         val page = PromptBank.welcomePage(0)
         assertEquals(PromptBank.WELCOME_PAGE_SIZE, page.size)
-        assertEquals("腾讯控股后市如何？", page[0].prompt)
-        assertEquals("港股科技板块趋势分析", page[1].prompt)
-        assertEquals("比亚迪 vs 特斯拉 对比", page[2].prompt)
+        assertEquals("腾讯控股在同行业里排名怎么样", page[0].prompt)
+        assertEquals("帮我详细分析一下贵州茅台", page[1].prompt)
+        assertEquals("当下科技股，我该加仓还是减仓", page[2].prompt)
     }
 
     @Test
@@ -37,6 +38,19 @@ class PromptBankTest {
     }
 
     @Test
+    fun featuredSkillIconsAreUnique() {
+        val featured = listOf("选股", "策略", "盯盘", "研究")
+        val icons = featured.map { PromptBank.iconFor(it) }
+        assertEquals(featured.size, icons.toSet().size)
+        assertEquals(IconKind.SPARKLE, PromptBank.iconFor("选股"))
+        assertEquals(IconKind.STRATEGY, PromptBank.iconFor("策略"))
+        assertEquals(IconKind.EYE, PromptBank.iconFor("盯盘"))
+        assertEquals(IconKind.BOOK, PromptBank.iconFor("研究"))
+        assertEquals(IconKind.RADAR, PromptBank.iconFor("机会"))
+        assertNotEquals(PromptBank.iconFor("选股"), PromptBank.iconFor("机会"))
+    }
+
+    @Test
     fun composerCapsulesStayShortAndSendable() {
         assertTrue(PromptBank.composerCapsules.size >= 16)
         PromptBank.composerCapsules.forEach { item ->
@@ -54,5 +68,16 @@ class PromptBankTest {
         assertEquals(PromptBank.CAPSULE_PAGE_SIZE, first.size)
         assertEquals(PromptBank.CAPSULE_PAGE_SIZE, second.size)
         assertTrue(first.intersect(second.toSet()).isEmpty())
+    }
+
+    @Test
+    fun memoryPromptUsesWatchlistOrExplainsEmpty() {
+        val filled = PromptBank.memoryPrompt(listOf("腾讯控股", "贵州茅台"))
+        assertTrue(filled.contains("腾讯控股"))
+        assertTrue(filled.contains("贵州茅台"))
+        assertTrue(filled.contains("投资记忆"))
+        val empty = PromptBank.memoryPrompt(emptyList())
+        assertTrue(empty.contains("没有自选"))
+        assertTrue(empty.contains("能做什么"))
     }
 }

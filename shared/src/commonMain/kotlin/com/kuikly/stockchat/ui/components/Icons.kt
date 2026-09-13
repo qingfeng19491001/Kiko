@@ -12,10 +12,13 @@ import kotlin.math.sin
  * 应用内所有图标均由 Canvas 矢量绘制，避免引入字体图标 / 多倍图资源，三端表现一致。
  */
 enum class IconKind {
-    MENU, PLUS, SEND, ARROW_UP, BACK, CLOSE, CHEVRON_RIGHT, CHEVRON_DOWN,
+    MENU, PLUS, SEND, ARROW_UP, ARROW_UP_RIGHT, BACK, CLOSE, CHEVRON_RIGHT, CHEVRON_DOWN,
     STAR, STAR_FILLED, SHARE, CLOCK, TRASH, SPARKLE, REFRESH, TREND_UP, ALERT, CHART, COMPARE, BOOK,
+    STRATEGY, EYE, RADAR,
     STOP, WIFI_OFF, MESSAGE, CANDLE, SEARCH, VOICE, KEYBOARD, EDIT, SPEAKER, SPEAKER_OFF,
     CAMERA, IMAGE, FOLDER, SETTINGS, LAYERS, MESSAGE_PLUS,
+    THUMBS_UP, THUMBS_DOWN,
+    CALENDAR, MEMORY, HEX_CUBE, GRID,
 }
 
 fun ViewContainer<*, *>.Icon(
@@ -74,6 +77,10 @@ object IconPainter {
                     moveTo(6 * u, 11.5f * u); lineTo(12 * u, 5.5f * u); lineTo(18 * u, 11.5f * u)
                 }
             }
+            IconKind.ARROW_UP_RIGHT -> {
+                line(ctx, 7 * u, 17 * u, 17 * u, 7 * u)
+                path(ctx) { moveTo(10.2f * u, 7 * u); lineTo(17 * u, 7 * u); lineTo(17 * u, 13.8f * u) }
+            }
             IconKind.SEND -> {
                 ctx.beginPath()
                 ctx.moveTo(3.5f * u, 11 * u)
@@ -118,6 +125,26 @@ object IconPainter {
                 circle(ctx, 18 * u, 18.5f * u, 2.4f * u, fill = false)
                 line(ctx, 8.2f * u, 10.9f * u, 15.8f * u, 6.6f * u)
                 line(ctx, 8.2f * u, 13.1f * u, 15.8f * u, 17.4f * u)
+            }
+            IconKind.THUMBS_UP -> {
+                path(ctx) {
+                    moveTo(9 * u, 20 * u); lineTo(5 * u, 20 * u); lineTo(5 * u, 10 * u); lineTo(9 * u, 10 * u); closePath()
+                }
+                path(ctx) {
+                    moveTo(9 * u, 10 * u); lineTo(12.5f * u, 4 * u); lineTo(14.5f * u, 4 * u)
+                    lineTo(14 * u, 9 * u); lineTo(19 * u, 9 * u); lineTo(20 * u, 10.5f * u)
+                    lineTo(18.5f * u, 19 * u); lineTo(9 * u, 19 * u); closePath()
+                }
+            }
+            IconKind.THUMBS_DOWN -> {
+                path(ctx) {
+                    moveTo(9 * u, 4 * u); lineTo(5 * u, 4 * u); lineTo(5 * u, 14 * u); lineTo(9 * u, 14 * u); closePath()
+                }
+                path(ctx) {
+                    moveTo(9 * u, 14 * u); lineTo(12.5f * u, 20 * u); lineTo(14.5f * u, 20 * u)
+                    lineTo(14 * u, 15 * u); lineTo(19 * u, 15 * u); lineTo(20 * u, 13.5f * u)
+                    lineTo(18.5f * u, 5 * u); lineTo(9 * u, 5 * u); closePath()
+                }
             }
             IconKind.CLOCK -> {
                 circle(ctx, 12 * u, 12 * u, 8.5f * u, fill = false)
@@ -175,6 +202,35 @@ object IconPainter {
                     lineTo(12 * u, 7 * u); closePath()
                 }
                 line(ctx, 12 * u, 7 * u, 12 * u, 17.5f * u)
+            }
+            IconKind.STRATEGY -> {
+                // 分叉路径：一个起点，两条去向
+                circle(ctx, 12 * u, 4.2f * u, 1.5f * u, fill = true)
+                line(ctx, 12 * u, 5.8f * u, 12 * u, 11.5f * u)
+                line(ctx, 12 * u, 11.5f * u, 5.6f * u, 18.2f * u)
+                line(ctx, 12 * u, 11.5f * u, 18.4f * u, 18.2f * u)
+                circle(ctx, 5.6f * u, 19.5f * u, 1.5f * u, fill = true)
+                circle(ctx, 18.4f * u, 19.5f * u, 1.5f * u, fill = true)
+            }
+            IconKind.EYE -> {
+                ctx.beginPath()
+                ctx.moveTo(3f * u, 12 * u)
+                ctx.quadraticCurveTo(12 * u, 5f * u, 21f * u, 12 * u)
+                ctx.quadraticCurveTo(12 * u, 19f * u, 3f * u, 12 * u)
+                ctx.closePath()
+                ctx.stroke()
+                circle(ctx, 12 * u, 12 * u, 3.1f * u, fill = false)
+                circle(ctx, 12 * u, 12 * u, 1.35f * u, fill = true)
+            }
+            IconKind.RADAR -> {
+                circle(ctx, 12 * u, 12 * u, 1.3f * u, fill = true)
+                ctx.beginPath()
+                ctx.arc(12 * u, 12 * u, 5f * u, 0f, (2 * PI).toFloat(), false)
+                ctx.stroke()
+                ctx.beginPath()
+                ctx.arc(12 * u, 12 * u, 8.4f * u, 0f, (2 * PI).toFloat(), false)
+                ctx.stroke()
+                line(ctx, 12 * u, 12 * u, 17.6f * u, 6.6f * u)
             }
             IconKind.STOP -> {
                 ctx.beginPath()
@@ -253,25 +309,26 @@ object IconPainter {
                 line(ctx, 5f * u, 18.5f * u, 10.5f * u, 17f * u)
             }
             IconKind.SPEAKER, IconKind.SPEAKER_OFF -> {
+                // Kimi 语音播报：实心喇叭 + 右侧声波 / 关闭叉号
                 ctx.beginPath()
-                ctx.moveTo(3.5f * u, 9 * u)
-                ctx.lineTo(8 * u, 9 * u)
-                ctx.lineTo(13 * u, 4.5f * u)
-                ctx.lineTo(13 * u, 19.5f * u)
-                ctx.lineTo(8 * u, 15 * u)
-                ctx.lineTo(3.5f * u, 15 * u)
+                ctx.moveTo(2.2f * u, 8.6f * u)
+                ctx.lineTo(6.6f * u, 8.6f * u)
+                ctx.lineTo(12f * u, 3.8f * u)
+                ctx.lineTo(12f * u, 20.2f * u)
+                ctx.lineTo(6.6f * u, 15.4f * u)
+                ctx.lineTo(2.2f * u, 15.4f * u)
                 ctx.closePath()
-                ctx.stroke()
+                ctx.fill()
                 if (kind == IconKind.SPEAKER) {
                     ctx.beginPath()
-                    ctx.arc(13.5f * u, 12 * u, 3.6f * u, -0.85f, 0.85f, false)
+                    ctx.arc(13.1f * u, 12 * u, 3.4f * u, -0.78f, 0.78f, false)
                     ctx.stroke()
                     ctx.beginPath()
-                    ctx.arc(13.5f * u, 12 * u, 6.6f * u, -0.95f, 0.95f, false)
+                    ctx.arc(13.1f * u, 12 * u, 6.3f * u, -0.88f, 0.88f, false)
                     ctx.stroke()
                 } else {
-                    line(ctx, 16 * u, 8 * u, 21.5f * u, 16.5f * u)
-                    line(ctx, 21.5f * u, 8 * u, 16 * u, 16.5f * u)
+                    line(ctx, 15.2f * u, 8.1f * u, 21.5f * u, 16.4f * u)
+                    line(ctx, 21.5f * u, 8.1f * u, 15.2f * u, 16.4f * u)
                 }
             }
             IconKind.CAMERA -> {
@@ -311,6 +368,48 @@ object IconPainter {
                 // 向上箭头
                 line(ctx, 12 * u, 17 * u, 12 * u, 12.5f * u)
                 path(ctx) { moveTo(9 * u, 14.5f * u); lineTo(12 * u, 11.5f * u); lineTo(15 * u, 14.5f * u) }
+            }
+            IconKind.CALENDAR -> {
+                rect(ctx, 4.2f * u, 6.2f * u, 15.6f * u, 13.8f * u)
+                line(ctx, 4.2f * u, 10.4f * u, 19.8f * u, 10.4f * u)
+                line(ctx, 8.2f * u, 3.6f * u, 8.2f * u, 7.4f * u)
+                line(ctx, 15.8f * u, 3.6f * u, 15.8f * u, 7.4f * u)
+                circle(ctx, 15.4f * u, 16.2f * u, 4.1f * u, fill = false)
+                line(ctx, 15.4f * u, 16.2f * u, 15.4f * u, 13.8f * u)
+                line(ctx, 15.4f * u, 16.2f * u, 17.8f * u, 16.2f * u)
+            }
+            IconKind.MEMORY -> {
+                circle(ctx, 10.4f * u, 8.2f * u, 3.3f * u, fill = false)
+                ctx.beginPath()
+                ctx.arc(10.4f * u, 20.6f * u, 7.4f * u, (PI * 1.12).toFloat(), (PI * 1.88).toFloat(), false)
+                ctx.stroke()
+                ctx.beginPath()
+                star4(ctx, 18.2f * u, 7.2f * u, 3.1f * u, 0.9f * u)
+                ctx.stroke()
+            }
+            IconKind.HEX_CUBE -> {
+                path(ctx) {
+                    moveTo(12 * u, 3.4f * u)
+                    lineTo(20 * u, 8f * u)
+                    lineTo(20 * u, 16f * u)
+                    lineTo(12 * u, 20.6f * u)
+                    lineTo(4 * u, 16f * u)
+                    lineTo(4 * u, 8f * u)
+                    closePath()
+                }
+                line(ctx, 12 * u, 3.4f * u, 12 * u, 12f * u)
+                line(ctx, 12 * u, 12f * u, 4 * u, 16f * u)
+                line(ctx, 12 * u, 12f * u, 20 * u, 16f * u)
+            }
+            IconKind.GRID -> {
+                val cell = 6.2f * u
+                val gap = 1.8f * u
+                val x0 = 4.8f * u
+                val y0 = 4.8f * u
+                rect(ctx, x0, y0, cell, cell)
+                rect(ctx, x0 + cell + gap, y0, cell, cell)
+                rect(ctx, x0, y0 + cell + gap, cell, cell)
+                rect(ctx, x0 + cell + gap, y0 + cell + gap, cell, cell)
             }
         }
     }
