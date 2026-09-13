@@ -6,11 +6,33 @@ Kiko 是面向股票行情与 AI 问答的跨端应用。业务与界面写在�
 
 ## 预览
 
-三端冷启动均为行情首页 `MarketList`。演示句：`腾讯控股在同行业里排名怎么样`。
+三端冷启动均为行情首页 `MarketList`。演示句：`腾讯控股在同行业里排名怎么样`。已在 Android、iOS、鸿蒙走查下列主界面。
 
-### 多平台
+### 行情页
 
-已在 Android、iOS、鸿蒙上走查行情、个股与问答主路径。
+| Android | iOS | 鸿蒙 |
+| :---: | :---: | :---: |
+| <img src="docs/preview/android-market.jpg" width="220" alt="Android 行情页" /> | <img src="docs/preview/ios-market.jpg" width="220" alt="iOS 行情页" /> | <img src="docs/preview/ohos-market.jpg" width="220" alt="鸿蒙行情页" /> |
+
+### 自选页
+
+| Android | 鸿蒙 |
+| :---: | :---: |
+| <img src="docs/preview/android-watch.jpg" width="220" alt="Android 自选页" /> | <img src="docs/preview/ohos-watch.jpg" width="220" alt="鸿蒙自选页" /> |
+
+iOS 自选与上表同一套 `MarketList` 顶栏 Tab（点「自选」即可），界面与 Android / 鸿蒙一致。
+
+### AI 问答页
+
+| Android | iOS | 鸿蒙 |
+| :---: | :---: | :---: |
+| <img src="docs/preview/android-chat.jpg" width="220" alt="Android AI 问答页" /> | <img src="docs/preview/ios-chat.jpg" width="220" alt="iOS AI 问答页" /> | <img src="docs/preview/ohos-chat.jpg" width="220" alt="鸿蒙 AI 问答页" /> |
+
+### 个股详情页
+
+| Android | iOS | 鸿蒙 |
+| :---: | :---: | :---: |
+| <img src="docs/preview/android-detail.jpg" width="220" alt="Android 个股详情页" /> | <img src="docs/preview/ios-detail.jpg" width="220" alt="iOS 个股详情页" /> | <img src="docs/preview/ohos-detail.jpg" width="220" alt="鸿蒙个股详情页" /> |
 
 ### 视频
 
