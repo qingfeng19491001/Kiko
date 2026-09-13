@@ -26,5 +26,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "KuiklyStockChat"
 
+include(":components")
 include(":shared")
 include(":androidApp")

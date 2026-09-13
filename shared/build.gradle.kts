@@ -6,8 +6,6 @@ plugins {
 }
 
 val kuiklyVersion: String = providers.gradleProperty("KUIKLY_VERSION").get()
-val kuiklyMarkdownVersion: String = providers.gradleProperty("KUIKLY_MARKDOWN_VERSION").get()
-val kuiklyKLineVersion: String = providers.gradleProperty("KUIKLY_KLINE_VERSION").get()
 
 kotlin {
     androidTarget {
@@ -39,10 +37,9 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+            api(project(":components"))
             implementation("com.tencent.kuikly-open:core:$kuiklyVersion")
             implementation("com.tencent.kuikly-open:core-annotations:$kuiklyVersion")
-            // 专业 K 线图 KMP 共享部分
-            implementation("io.github.qingfeng19491001:kuiklyklinechart:$kuiklyKLineVersion")
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.1")
             implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
         }
@@ -51,16 +48,7 @@ kotlin {
         }
         androidMain.dependencies {
             api("com.tencent.kuikly-open:core-render-android:$kuiklyVersion")
-            // AI 回复 Markdown 渲染（含流式增量渲染）— 仅 Android/iOS 使用
-            implementation("com.tencent.kuiklybase:KuiklyMarkdown:$kuiklyMarkdownVersion")
-            // K 线图 Android 原生渲染部分
-            api("io.github.qingfeng19491001:kuiklyklinechartandroid:$kuiklyKLineVersion")
-            // 火山引擎流式语音服务的 Android WebSocket 客户端。
             implementation("com.squareup.okhttp3:okhttp:4.12.0")
-        }
-        iosMain.dependencies {
-            // AI 回复 Markdown 渲染（含流式增量渲染）— 仅 Android/iOS 使用
-            implementation("com.tencent.kuiklybase:KuiklyMarkdown:$kuiklyMarkdownVersion")
         }
     }
 }

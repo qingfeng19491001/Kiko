@@ -27,3 +27,5 @@ shared/shared.podspec.bak
 
 # reference clones (not part of the project)
 .ref/
+.refs/
+ohosApp/KuiklyKLineChart/

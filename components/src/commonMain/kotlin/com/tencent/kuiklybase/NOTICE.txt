@@ -1,0 +1,6 @@
+Vendored from MIT-licensed Kuikly community components and adapted for stock chat:
+
+- Table: https://github.com/qingfeng19491001/KuiklyTableView
+- Chart: https://github.com/qingfeng19491001/KuiklyChart
+
+Original copyright remains with the upstream authors.

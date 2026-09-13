@@ -5,9 +5,9 @@ source 'https://cdn.cocoapods.org/'
 target 'KuiklyStockChat' do
   inhibit_all_warnings!
 
-  # Kuikly iOS 渲染器（与 KUIKLY_VERSION 对齐：2.15.0-2.1.21）
+  # Kuikly iOS 渲染器（与 KUIKLY_VERSION 对齐：2.26.0-2.1.21）
   # 通过 maven 镜像查找 KuiklyIOSRender 的 CocoaPods 源
-  pod 'OpenKuiklyIOSRender', '2.15.0'
+  pod 'OpenKuiklyIOSRender', '2.26.0'
 
   # 业务代码 Pod（由 ../shared/build.gradle.kts 的 cocoapods {} 自动生成）
   pod 'shared', :path => '../shared'

@@ -25,5 +25,7 @@ rootProject.name = "KuiklyStockChat"
 val ohosBuildFileName = "build.ohos.gradle.kts"
 rootProject.buildFileName = ohosBuildFileName
 
+include(":components")
+project(":components").buildFileName = ohosBuildFileName
 include(":shared")
 project(":shared").buildFileName = ohosBuildFileName
