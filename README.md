@@ -1,18 +1,35 @@
 # Kiko · kuikly-stock-chat
 
-基于 **Kuikly + Kotlin Multiplatform** 的跨端 AI 股票应用。一套 `commonMain` 页面同时跑 Android / iOS / 鸿蒙：行情列表 → 个股详情 → AI问答。
+Kiko 是面向股票行情与 AI 问答的跨端应用。业务与界面写在一套 `commonMain` 里，Android / iOS / 鸿蒙共用同一条路径：行情列表 → 个股详情 → AI 问答。
 
 2026 腾讯犀牛鸟开源人才计划 · KuiklyUI 实战作品。行情与 AI 结论仅供演示，**不构成投资建议**。
 
----
+## 预览
 
-## 项目演示视频
+三端冷启动均为行情首页 `MarketList`。演示句：`腾讯控股在同行业里排名怎么样`。
 
-三端（Android / iOS / 鸿蒙）行情 → 个股 → AI 问答走查：
+### 多平台
+
+已在 Android、iOS、鸿蒙上走查行情、个股与问答主路径。
+
+### 视频
 
 [kiko-demo.mp4](docs/kiko-demo.mp4)
 
----
+三端行情 → 个股 → AI 问答走查。点开仓库内视频即可在 GitHub 文件页播放。
+
+## 项目简介
+
+用户可以按市场浏览真实行情、点进个股看 K 线工作区，也可以直接问 AI 排名、对比或仓位观察。本地用行情快照和技术分析拼出可核对的数字卡片，模型只写章节解读，再按「标题 → 文字 → 数据卡」穿插成一篇回答。点卡片进详情，详情十字光标选点也能带回聊天。
+
+### 技术栈
+
+- **客户端**：Kotlin、Kotlin Multiplatform、Kuikly Compose DSL
+- **平台端**：Android、iOS、OpenHarmony
+- **网络与数据**：Kuikly `NetworkModule`、腾讯 `qt` / `fqkline`
+- **AI**：阿里云百炼（对话、文档、语音）；密钥放在本地 `AiSecrets.kt`
+- **图表**：共享 K 线工作区 + 各端原生图桥
+- **工程化**：Gradle Kotlin DSL、`:components` 与 `:shared` 拆仓
 
 ## 完成任务情况
 
@@ -20,8 +37,6 @@
 | --- | --- | --- |
 | **Task 1 · AI 行情原型** | 已完成 | 行情首页、分市场切换、指数与总览、自选、个股详情与完整 K 线工作区 |
 | **Task 2 · AI 股票问答** | 已完成 | 研究过程可见、结论+证据卡片、流式正文、附件/语音、详情选点追问 |
-
-三端冷启动均为行情首页 `MarketList`。演示句：`腾讯控股在同行业里排名怎么样`。
 
 ### Task 1
 
@@ -36,45 +51,109 @@
 ### Task 2
 
 - **真研究阶段**：理解问题 → 识别标的 → 读行情/日 K → 交叉分析 → 完成。阶段由请求推进，不是假倒计时；正文出来后进度条收起，来源可再展开。
-- **结论先行、证据随后**：本地用真实行情拼卡片/图表，模型只写章节解读，再按「标题 → 文字 → 数据卡」穿插，避免卡片堆一堆、长文甩最后。
+- **结论先行、证据随后**：本地用真实行情拼卡片/图表，模型只写章节解读，再按「标题 → 文字 → 数据卡」穿插。
 - **结构化回答**：行情卡、同行表、对比、K 线/柱状/多序列图、关键价位、风险与追问；点卡片进详情。
 - **同业问答**：先给格局结论，再给可点进详情的对比表和阶段表现。
 - **多模态**：图片、文档（`qwen-long`）、语音输入与朗读。
 - **收束操作**：朗读、赞踩、系统分享、重新生成；失败可重试，不把错误伪装成分析。
 
----
+## 快速开始
 
-## 亮点
+### 1. 环境
 
-| 亮点 | 说明 |
-| --- | --- |
-| **三端一套页** | 4 个 `@Page` 全在共享层；宿主只做容器和附件 / 分享 / 语音桥。Android、iOS、鸿蒙均可出包。 |
-| **行情不造假** | 首页禁止 Mock 价。没有全市场成交明细就不画假涨跌分布、假主力。连板/广度/资金只在本地 AKShare 网关有数时出现。 |
-| **卡片是证据，模型是文案** | `AnswerComposer` 用快照和技术分析出可复现数字；百炼按章节写解读；`AnswerAssembler` 把两段缝成一篇研报。Key 缺失或模型失败直接说原因，不换套话。 |
-| **研究过程可核对** | 进度和「用了几类数据源、几个标的、多少根日 K」来自本轮真实调用，不伪造网页检索条数。 |
-| **图表和对话打通** | 详情十字光标选点 → 带 OHLC 进聊天；回答里的行情卡 / 同行表再点回详情。 |
-| **K 线是工作区不是贴图** | 多周期、主图+双副图、指标切换；日 K 预测只在模型校验通过后叠加，失败不画假曲线。 |
-| **美股指数能画出历史** | 报价走 `usDJI`，K 线走 `us.DJI`，避免腾讯单根棒。 |
-| **组件与业务拆仓** | `:components` 无 `@Page`，图表 / 表格 / Markdown 独立，避免 KSP 入口冲突。 |
-| **合仓三端可跑** | Task 1 与 Task 2 在同一仓库交付；行情与卡片数字可回溯到接口。 |
+- JDK 17+（鸿蒙链路建议本机 JBR 21，与 `gradle.properties` 一致）
+- Android Studio（Android 端）
+- Xcode + CocoaPods（iOS 端）
+- DevEco Studio（鸿蒙端）
 
----
-
-## 快速运行
+### 2. 配置密钥
 
 ```bash
 cp shared/src/commonMain/kotlin/com/kuikly/stockchat/data/ai/AiSecrets.kt.example \
    shared/src/commonMain/kotlin/com/kuikly/stockchat/data/ai/AiSecrets.kt
 # 填写百炼 API_KEY；语音 / iTick 可空
+```
 
+密钥不要提交。`sk-sp-` 走 Token Plan，其余走 DashScope。
+
+可选：`python scripts/ak_gateway.py`（`127.0.0.1:8790`）后才有连板 / 广度 / 资金卡。
+
+### 3. 运行客户端
+
+```bash
 ./gradlew :androidApp:assembleDebug
 # APK：androidApp/build/outputs/apk/debug/androidApp-debug.apk
 ```
 
-直达聊天：`adb shell am start -n com.kuikly.stockchat/com.kuikly.stockchat.android.KuiklyRenderActivity --es pageName StockChat`
+直达聊天：
 
-iOS：`./gradlew :shared:podInstall` 后 `iosApp` `pod install`，根页已是 `MarketList`。鸿蒙用 DevEco 打开 `ohosApp`。
+```bash
+adb shell am start -n com.kuikly.stockchat/com.kuikly.stockchat.android.KuiklyRenderActivity --es pageName StockChat
+```
 
-可选：`python scripts/ak_gateway.py`（`127.0.0.1:8790`）后才有连板 / 广度 / 资金卡。
+- **iOS**：`./gradlew :shared:podInstall` 后在 `iosApp` 执行 `pod install`，根页已是 `MarketList`。
+- **鸿蒙**：用 DevEco 打开 `ohosApp`。
 
-密钥不要提交。`sk-sp-` 走 Token Plan，其余走 DashScope。
+## 架构说明
+
+项目采用「共享页面与领域逻辑 + 各端宿主桥」：
+
+```text
+kuikly-stock-chat/
+├── shared/                 # 跨端页面、问答、行情、分析与卡片
+├── components/             # 图表 / 表格 / Markdown，无 @Page
+├── androidApp/             # Android 容器与原生模块
+├── iosApp/                 # iOS 容器、K 线与画布适配
+├── ohosApp/                # 鸿蒙工程与原生 View / Module
+├── buildSrc/               # Gradle 依赖与版本
+└── docs/                   # 演示视频等说明资产
+```
+
+- `shared/.../app`：`MarketList`、`StockDetail`、`StockChat`、`StockChatSettings` 四个 `@Page`。
+- `shared/.../ui/market`：行情首页与市场总览。
+- `shared/.../ui/detail`：个股工作区、诊股与分栏。
+- `shared/.../ui/chat`、`ui/answer`：问答壳与结构化卡片。
+- `shared/.../domain`：意图、研报拼装、技术分析。
+- `shared/.../data`：腾讯行情、百炼、附件与会话存储。
+
+平台工程只做容器、资源目录和附件 / 分享 / 语音 / K 线图桥，不复制业务页。
+
+## 设计亮点
+
+### 三端一套页
+
+4 个 `@Page` 全在共享层。Android、iOS、鸿蒙均可出包，宿主只注册原生能力。
+
+### 行情不造假
+
+首页禁止 Mock 价。没有全市场成交明细就不画假涨跌分布、假主力。缺数显示 `--` 并提示不完整。连板 / 广度 / 资金只在本地 AKShare 网关有数时出现。
+
+### 卡片是证据，模型是文案
+
+`AnswerComposer` 用快照和技术分析出可复现数字；百炼按章节写解读；`AnswerAssembler` 把两段缝成一篇研报。Key 缺失或模型失败直接说原因，不换套话。
+
+### 研究过程可核对
+
+进度和「用了几类数据源、几个标的、多少根日 K」来自本轮真实调用，不是假倒计时，也不伪造网页检索条数。
+
+### 图表和对话打通
+
+详情十字光标选点 → 带 OHLC 进聊天；回答里的行情卡 / 同行表再点回详情。
+
+### K 线是工作区不是贴图
+
+多周期、主图 + 双副图、指标切换。日 K 预测只在模型校验通过后叠加，失败不画假曲线。美股指数报价走 `usDJI`，K 线走 `us.DJI`，避免腾讯单根棒。
+
+### 组件与业务拆仓
+
+`:components` 无 `@Page`，图表 / 表格 / Markdown 独立，避免 KSP 入口冲突。Task 1 与 Task 2 在同一仓库交付，行情与卡片数字可回溯到接口。
+
+## 开发与测试
+
+```bash
+./gradlew :shared:testDebugUnitTest
+```
+
+## 免责声明
+
+项目用于学习、跨端实践与课题演示。AI 解读与行情数据可能延迟或失败，**不构成投资建议**。Kuikly、百炼、腾讯行情各自遵循其条款。
