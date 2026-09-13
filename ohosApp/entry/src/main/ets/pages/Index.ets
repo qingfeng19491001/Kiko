@@ -3,7 +3,7 @@ import router from '@ohos.router';
 import { KuiklyViewDelegate } from '../kuikly/KuiklyViewDelegate';
 import globalNativeManager from '../kuikly/MyNativeManager';
 
-const DEFAULT_PAGE_NAME: string = 'StockChat';
+const DEFAULT_PAGE_NAME: string = 'MarketList';
 
 @Entry
 @Component

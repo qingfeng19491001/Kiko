@@ -10,26 +10,49 @@ object StockCatalog {
         code = "00700", name = "腾讯控股", market = Market.HK,
         aliases = listOf("腾讯", "tencent", "700", "0700"),
         sector = "互联网 / 游戏 / 社交", logoColor = 0xFF2B6CF6,
+        stockConnect = true,
     )
     val alibaba = Instrument(
         code = "09988", name = "阿里巴巴", market = Market.HK,
         aliases = listOf("阿里", "阿里巴巴-W", "baba", "9988"),
         sector = "互联网 / 电商 / 云计算", logoColor = 0xFFFF6A00,
+        stockConnect = true,
     )
     val meituan = Instrument(
         code = "03690", name = "美团", market = Market.HK,
         aliases = listOf("美团-W", "meituan", "3690"),
         sector = "本地生活 / 外卖", logoColor = 0xFFFFC300,
+        stockConnect = true,
     )
     val xiaomi = Instrument(
         code = "01810", name = "小米集团", market = Market.HK,
         aliases = listOf("小米", "小米集团-W", "xiaomi", "1810"),
         sector = "智能硬件 / 新能源汽车", logoColor = 0xFFFF6900,
+        stockConnect = true,
+    )
+    val baidu = Instrument(
+        code = "09888", name = "百度集团", market = Market.HK,
+        aliases = listOf("百度", "baidu", "bidu", "9888"),
+        sector = "互联网 / 搜索 / AI", logoColor = 0xFF2932E1,
+        stockConnect = true,
+    )
+    val kuaishou = Instrument(
+        code = "01024", name = "快手", market = Market.HK,
+        aliases = listOf("快手-W", "kuaishou", "1024"),
+        sector = "互联网 / 短视频", logoColor = 0xFFFF4906,
+        stockConnect = true,
+    )
+    val bilibili = Instrument(
+        code = "09626", name = "哔哩哔哩", market = Market.HK,
+        aliases = listOf("B站", "b站", "bilibili", "哔哩", "9626"),
+        sector = "互联网 / 视频", logoColor = 0xFF00A1D6,
+        stockConnect = true,
     )
     val byd = Instrument(
         code = "01211", name = "比亚迪股份", market = Market.HK,
         aliases = listOf("比亚迪", "byd", "1211"),
         sector = "新能源汽车", logoColor = 0xFFE60012,
+        stockConnect = true,
     )
     val moutai = Instrument(
         code = "600519", name = "贵州茅台", market = Market.SH,
@@ -70,6 +93,10 @@ object StockCatalog {
         code = "HSTECH", name = "恒生科技指数", market = Market.HK, type = InstrumentType.INDEX,
         aliases = listOf("恒生科技", "恒科", "港股科技板块", "港股科技"), logoText = "科", logoColor = 0xFF7C3AED,
     )
+    val hscei = Instrument(
+        code = "HSCEI", name = "恒生中国企业指数", market = Market.HK, type = InstrumentType.INDEX,
+        aliases = listOf("国企指数", "恒生国企", "HSCEI"), logoText = "国", logoColor = 0xFF0F766E,
+    )
     val sse = Instrument(
         code = "000001", name = "上证指数", market = Market.SH, type = InstrumentType.INDEX,
         aliases = listOf("上证", "沪指", "大盘", "A股大盘", "a股"), logoText = "沪", logoColor = 0xFFE8541E,
@@ -82,11 +109,37 @@ object StockCatalog {
         code = "399006", name = "创业板指", market = Market.SZ, type = InstrumentType.INDEX,
         aliases = listOf("创业板", "创指"), logoText = "创", logoColor = 0xFF0EA5E9,
     )
+    val csi300 = Instrument(
+        code = "000300", name = "沪深300", market = Market.SH, type = InstrumentType.INDEX,
+        aliases = listOf("沪深三百", "CSI300"), logoText = "3", logoColor = 0xFFB45309,
+    )
+    val csi500 = Instrument(
+        code = "000905", name = "中证500", market = Market.SH, type = InstrumentType.INDEX,
+        aliases = listOf("中证五百", "CSI500"), logoText = "500", logoColor = 0xFF0369A1,
+    )
+    val csi1000 = Instrument(
+        code = "000852", name = "中证1000", market = Market.SH, type = InstrumentType.INDEX,
+        aliases = listOf("中证一千", "CSI1000"), logoText = "千", logoColor = 0xFF6D28D9,
+    )
+    val dji = Instrument(
+        code = "DJI", tencentCodeOverride = "DJI", name = "道琼斯", market = Market.US, type = InstrumentType.INDEX,
+        aliases = listOf("道指", "道琼斯指数", "Dow Jones"), logoText = "道", logoColor = 0xFF1D4ED8,
+    )
+    val ixic = Instrument(
+        code = "IXIC", tencentCodeOverride = "IXIC", name = "纳斯达克", market = Market.US, type = InstrumentType.INDEX,
+        aliases = listOf("纳指", "纳斯达克综合", "Nasdaq"), logoText = "纳", logoColor = 0xFF0369A1,
+    )
+    val ndx = Instrument(
+        code = "NDX", tencentCodeOverride = "NDX", name = "纳斯达克100", market = Market.US, type = InstrumentType.INDEX,
+        aliases = listOf("纳指100", "Nasdaq 100", "NDX"), logoText = "百", logoColor = 0xFF4338CA,
+    )
 
     val stocks: List<Instrument> = listOf(
-        tencent, alibaba, meituan, xiaomi, byd, moutai, catl, pingAn, apple, tesla, nvidia,
+        tencent, alibaba, meituan, xiaomi, baidu, kuaishou, bilibili, byd, moutai, catl, pingAn, apple, tesla, nvidia,
     )
-    val indices: List<Instrument> = listOf(hsi, hstech, sse, szse, chinext)
+    val indices: List<Instrument> = listOf(
+        hsi, hstech, hscei, sse, szse, chinext, csi300, csi500, csi1000, dji, ixic, ndx,
+    )
     val all: List<Instrument> = stocks + indices
 
     /** 热门标的（用于欢迎页推荐 / 兜底） */

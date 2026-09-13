@@ -18,6 +18,7 @@ import com.kuikly.stockchat.android.adapter.KRRouterAdapter
 import com.kuikly.stockchat.android.adapter.KRThreadAdapter
 import com.kuikly.stockchat.android.adapter.KRUncaughtExceptionHandlerAdapter
 import com.kuikly.stockchat.android.attachment.KRAttachmentModule
+import com.kuikly.stockchat.android.share.KRContentActionModule
 import com.kuikly.stockchat.data.ai.AndroidPlatformContext
 import com.tencent.kuikly.core.render.android.adapter.KuiklyRenderAdapterManager
 import com.tencent.kuikly.core.render.android.css.ktx.toMap
@@ -95,12 +96,20 @@ class KuiklyRenderActivity : AppCompatActivity(), KuiklyRenderViewBaseDelegatorD
         kuiklyRenderExport.moduleExport(KRAttachmentModule.MODULE_NAME) {
             KRAttachmentModule().also { attachmentModule = it }
         }
+        kuiklyRenderExport.moduleExport(KRContentActionModule.MODULE_NAME) { KRContentActionModule() }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == KRAttachmentModule.REQUEST_CAMERA || requestCode == KRAttachmentModule.REQUEST_PICKER) {
             attachmentModule?.onActivityResult(requestCode, resultCode, data)
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == KRAttachmentModule.REQUEST_CAMERA_PERMISSION) {
+            attachmentModule?.onRequestPermissionsResult(requestCode, grantResults)
         }
     }
 
@@ -128,7 +137,7 @@ class KuiklyRenderActivity : AppCompatActivity(), KuiklyRenderViewBaseDelegatorD
     companion object {
         private const val KEY_PAGE_NAME = "pageName"
         private const val KEY_PAGE_DATA = "pageData"
-        private const val DEFAULT_PAGE = "StockChat"
+        private const val DEFAULT_PAGE = "MarketList"
 
         init {
             with(KuiklyRenderAdapterManager) {

@@ -39,6 +39,8 @@ data class Instrument(
     val logoText: String = name.take(1),
     /** 头像底色 ARGB */
     val logoColor: Long = 0xFF2B6CF6,
+    /** 是否属于港股通（南向）可买标的 */
+    val stockConnect: Boolean = false,
     /** 腾讯行情接口使用的代码（指数与个股规则不同时可覆盖） */
     private val tencentCodeOverride: String? = null,
 ) {

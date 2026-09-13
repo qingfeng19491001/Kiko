@@ -18,12 +18,11 @@ export class RouterAdapter implements IKRRouterAdapter {
       router.back()
       return
     }
-    // 冷启动直达页面时 back 无效，替换为 StockChat 入口
-    AppStorage.setOrCreate<string>('stockchat_page_name', 'StockChat')
+    AppStorage.setOrCreate<string>('stockchat_page_name', 'MarketList')
     router.replaceUrl({
       url: 'pages/Index',
       params: {
-        pageName: 'StockChat',
+        pageName: 'MarketList',
         pageData: {}
       }
     })
