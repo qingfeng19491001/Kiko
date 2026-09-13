@@ -36,6 +36,9 @@ object AiConfig {
     /** 默认模型 */
     const val MODEL = "qwen3.8-flash"
 
+    /** 文档理解模型：通过 `/files` + `fileid://` 读取 PDF/Office 原文。 */
+    const val LONG_MODEL = "qwen-long"
+
     /** 请求超时（秒） */
     const val TIMEOUT_SECONDS = 30
 

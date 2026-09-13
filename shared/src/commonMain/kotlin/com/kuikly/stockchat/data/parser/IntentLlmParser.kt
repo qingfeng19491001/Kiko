@@ -1,4 +1,8 @@
-package com.kuikly.stockchat.domain.chat
+package com.kuikly.stockchat.data.parser
+
+import com.kuikly.stockchat.domain.chat.Intent
+import com.kuikly.stockchat.domain.chat.IntentParser
+import com.kuikly.stockchat.domain.chat.ParsedIntent
 
 import com.kuikly.stockchat.domain.model.Instrument
 import com.kuikly.stockchat.domain.model.StockCatalog

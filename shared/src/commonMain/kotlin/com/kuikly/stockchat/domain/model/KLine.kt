@@ -16,7 +16,7 @@ enum class KLinePeriod(
     val line: Boolean = false,
 ) {
     MINUTE("分时", "minute", 1, "minute", true),
-    FIVE_DAY("五日", "m5", 5, "day", true),
+    FIVE_DAY("五日", "day", 5, "day", true),
     DAY("日K", "day"),
     WEEK("周K", "week"),
     MONTH("月K", "month"),
@@ -31,6 +31,10 @@ enum class KLinePeriod(
 
     /** 分时（当日逐笔）走独立的分时接口 */
     val isIntraday: Boolean get() = this == MINUTE
+
+    /** 1 分～120 分走腾讯 mkline，不能打 fqkline */
+    val isMinuteBar: Boolean get() = this == MIN_1 || this == MIN_5 || this == MIN_15 ||
+        this == MIN_30 || this == MIN_60 || this == MIN_120
 
     /** 主周期栏之外的扩展周期（收进“更多”菜单） */
     val isExtended: Boolean get() = ordinal > MONTH.ordinal

@@ -1,5 +1,6 @@
 package com.kuikly.stockchat.data.market
 
+import com.kuikly.stockchat.domain.model.KLinePeriod
 import com.kuikly.stockchat.domain.model.StockCatalog
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -22,6 +23,25 @@ class TencentQuoteParserTest {
         assertNotNull(quote)
         assertEquals(367.81, quote!!.price, 0.001)
         assertFalse(quote.isMock)
+    }
+
+    @Test
+    fun quoteUrlBatchesMultipleSymbols() {
+        val url = TencentMarketParser.quoteUrl(listOf(StockCatalog.tencent, StockCatalog.moutai, StockCatalog.apple))
+        assertTrue(url.startsWith("https://qt.gtimg.cn/q="))
+        assertTrue(url.contains("hk00700"))
+        assertTrue(url.contains("sh600519"))
+        assertTrue(url.contains("usAAPL") || url.contains("AAPL"))
+        assertFalse(url.contains("usAAPL.OQ"))
+    }
+
+    @Test
+    fun usIndexKlineUsesDottedSymbol() {
+        val dji = StockCatalog.dji
+        assertEquals("us.DJI", TencentMarketParser.klineSymbol(dji))
+        assertTrue("us.DJI" in TencentMarketParser.quoteLookupKeys(dji))
+        assertTrue(TencentMarketParser.klineParam(dji, KLinePeriod.DAY, 40).startsWith("us.DJI,"))
+        assertEquals("usAAPL", TencentMarketParser.klineSymbol(StockCatalog.apple))
     }
 
     @Test

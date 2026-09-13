@@ -1,5 +1,6 @@
 package com.kuikly.stockchat.domain.prediction
 
+import com.kuikly.stockchat.data.parser.StockPredictionParser
 import com.kuikly.stockchat.domain.util.DateUtil
 import kotlin.test.Test
 import kotlin.test.assertEquals

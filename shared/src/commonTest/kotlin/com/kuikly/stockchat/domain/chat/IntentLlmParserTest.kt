@@ -1,5 +1,6 @@
 package com.kuikly.stockchat.domain.chat
 
+import com.kuikly.stockchat.data.parser.IntentLlmParser
 import com.kuikly.stockchat.domain.model.StockCatalog
 import kotlin.test.Test
 import kotlin.test.assertEquals

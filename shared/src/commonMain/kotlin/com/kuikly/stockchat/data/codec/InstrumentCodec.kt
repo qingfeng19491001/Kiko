@@ -1,5 +1,9 @@
-package com.kuikly.stockchat.domain.model
+package com.kuikly.stockchat.data.codec
 
+import com.kuikly.stockchat.domain.model.Instrument
+import com.kuikly.stockchat.domain.model.InstrumentCache
+import com.kuikly.stockchat.domain.model.InstrumentType
+import com.kuikly.stockchat.domain.model.Market
 import com.tencent.kuikly.core.nvi.serialization.json.JSONObject
 
 object InstrumentCodec {

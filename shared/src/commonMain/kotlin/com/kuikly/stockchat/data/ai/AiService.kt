@@ -12,17 +12,25 @@ import com.kuikly.stockchat.domain.chat.AnswerComposer
 import com.kuikly.stockchat.domain.chat.Intent
 import com.kuikly.stockchat.domain.chat.IntentParser
 import com.kuikly.stockchat.domain.chat.ParsedIntent
+import com.kuikly.stockchat.domain.chat.ResearchProgress
+import com.kuikly.stockchat.domain.chat.ResearchSource
+import com.kuikly.stockchat.domain.chat.ResearchSourceKind
+import com.kuikly.stockchat.domain.chat.ResearchStage
 import com.kuikly.stockchat.domain.model.DerivedMarketData
 import com.kuikly.stockchat.domain.model.Instrument
 import com.kuikly.stockchat.domain.model.InstrumentCache
 import com.kuikly.stockchat.domain.model.InstrumentResolver
 import com.kuikly.stockchat.domain.model.MarketSnapshot
+import com.kuikly.stockchat.domain.model.PeerUniverse
 import com.tencent.kuikly.core.timer.setTimeout
 
 /**
  * AI 回答的流式事件监听。所有回调都在 Kuikly 线程触发，可直接更新 UI 状态。
  */
 interface AnswerListener {
+    /** 研究链路的真实进度，用于展示“理解问题 → 读取行情 → 生成结论”。 */
+    fun onProgress(progress: ResearchProgress) = Unit
+
     /** 意图已识别，开始检索数据 */
     fun onThinking(parsed: ParsedIntent)
 
@@ -77,6 +85,7 @@ class AiService(
     private val intentRecognizer: RemoteIntentRecognizer? = null,
     private val fileReader: FileContentReader? = null,
     private val instrumentResolver: InstrumentResolver = InstrumentResolver(),
+    private val documents: DashScopeDocumentClient? = null,
 ) {
     /** 每个 tick 输出的字符数 */
     var charsPerTick: Int = 4
@@ -98,18 +107,57 @@ class AiService(
         attachments: List<Attachment> = emptyList(),
     ) {
         val myGeneration = ++generation
+        listener.onProgress(ResearchProgress(ResearchStage.UNDERSTANDING, "正在理解问题与分析目标"))
         recognize(text, contextInstruments) { parsed ->
             if (myGeneration != generation) return@recognize
             listener.onThinking(parsed)
+            listener.onProgress(
+                ResearchProgress(
+                    ResearchStage.RESOLVING_INSTRUMENTS,
+                    if (parsed.instruments.isEmpty()) "正在匹配适合的回答场景" else "已识别 ${parsed.instruments.size} 个相关标的",
+                    instrumentCount = parsed.instruments.size,
+                ),
+            )
             AttachmentLoader.loadAll(attachments, fileReader) { loaded ->
                 if (myGeneration != generation) return@loadAll
-                instrumentResolver.enrich(parsed) { resolved ->
-                    if (myGeneration != generation) return@enrich
-                    InstrumentCache.rememberAll(resolved.instruments)
-                    if (resolved.instruments != parsed.instruments) listener.onThinking(resolved)
-                    continueAsk(resolved, loaded, myGeneration, listener)
+                val client = documents
+                if (client == null) {
+                    continueAfterAttachments(parsed, loaded, emptyList(), myGeneration, listener)
+                    return@loadAll
+                }
+                client.enrich(loaded) { enriched, remoteIds ->
+                    if (myGeneration != generation) {
+                        client.deleteRemote(remoteIds)
+                        return@enrich
+                    }
+                    continueAfterAttachments(parsed, enriched, remoteIds, myGeneration, listener)
                 }
             }
+        }
+    }
+
+    private fun continueAfterAttachments(
+        parsed: ParsedIntent,
+        loaded: List<LoadedAttachment>,
+        remoteIds: List<String>,
+        myGeneration: Int,
+        listener: AnswerListener,
+    ) {
+        instrumentResolver.enrich(parsed) { resolved ->
+            if (myGeneration != generation) {
+                documents?.deleteRemote(remoteIds)
+                return@enrich
+            }
+            InstrumentCache.rememberAll(resolved.instruments)
+            if (resolved.instruments != parsed.instruments) listener.onThinking(resolved)
+            listener.onProgress(
+                ResearchProgress(
+                    ResearchStage.FETCHING_MARKET_DATA,
+                    if (resolved.instruments.isEmpty()) "正在整理专业知识" else "正在读取实时行情与历史走势",
+                    instrumentCount = resolved.instruments.size,
+                ),
+            )
+            continueAsk(resolved, loaded, remoteIds, myGeneration, listener)
         }
     }
 
@@ -122,20 +170,35 @@ class AiService(
     private fun continueAsk(
         parsed: ParsedIntent,
         loaded: List<LoadedAttachment>,
+        remoteIds: List<String>,
         myGeneration: Int,
         listener: AnswerListener,
     ) {
         val needed = when (parsed.intent) {
             Intent.KNOWLEDGE, Intent.GREETING, Intent.LIMIT_UP_LADDER -> emptyList()
             Intent.UNKNOWN -> parsed.instruments.take(1)
-            Intent.COMPARE -> parsed.instruments.take(2)
+            Intent.COMPARE -> PeerUniverse.forCompare(parsed.instruments, parsed.rawText, max = 4)
             else -> parsed.instruments.take(1)
         }
+        if (needed.isNotEmpty()) InstrumentCache.rememberAll(needed)
         loadDerived(parsed) { derived ->
             if (myGeneration != generation) return@loadDerived
             marketRepository.loadSnapshots(needed) { snapshots ->
                 if (myGeneration != generation) return@loadSnapshots
-                engine.generate(parsed, snapshots, derived, loaded) { answer ->
+                val liveSnapshots = snapshots.filter { !it.quote.isMock }
+                val dataPointCount = liveSnapshots.sumOf { it.dailyBars.size }
+                val sources = buildSources(liveSnapshots, derived, loaded, dataPointCount)
+                listener.onProgress(
+                    ResearchProgress(
+                        ResearchStage.SYNTHESIZING,
+                        if (liveSnapshots.isEmpty()) "正在组织回答" else "行情读取完成，正在交叉分析",
+                        instrumentCount = liveSnapshots.size,
+                        dataPointCount = dataPointCount,
+                        sources = sources,
+                    ),
+                )
+                engine.generate(parsed, liveSnapshots, derived, loaded) { answer ->
+                    documents?.deleteRemote(remoteIds)
                     if (myGeneration != generation) return@generate
                     setTimeout(pagerId, 350) {
                         if (myGeneration != generation) return@setTimeout
@@ -144,6 +207,43 @@ class AiService(
                 }
             }
         }
+    }
+
+    private fun buildSources(
+        snapshots: List<MarketSnapshot>,
+        derived: DerivedMarketData,
+        loaded: List<LoadedAttachment>,
+        dataPointCount: Int,
+    ): List<ResearchSource> = buildList {
+        if (snapshots.isNotEmpty()) add(
+            ResearchSource(
+                title = "实时行情快照",
+                detail = "${snapshots.size} 个标的 · 最新价、涨跌幅与成交信息",
+                kind = ResearchSourceKind.QUOTE,
+            ),
+        )
+        if (dataPointCount > 0) add(
+            ResearchSource(
+                title = "历史日 K 数据",
+                detail = "$dataPointCount 条走势数据用于趋势与区间分析",
+                kind = ResearchSourceKind.HISTORY,
+            ),
+        )
+        if (!derived.isEmpty) add(
+            ResearchSource(
+                title = "AKShare 市场数据",
+                detail = "市场广度、连板梯队或资金流向",
+                kind = ResearchSourceKind.DERIVED,
+            ),
+        )
+        val readable = loaded.count { it.error == null && (it.hasImage || it.hasText) }
+        if (readable > 0) add(
+            ResearchSource(
+                title = "用户提供的附件",
+                detail = "$readable 份图片或文档已纳入分析",
+                kind = ResearchSourceKind.ATTACHMENT,
+            ),
+        )
     }
 
     /** 按意图加载衍生数据（市场广度 / 连板梯队 / 资金流向）；网关未启动时全部为空，不影响主流程 */

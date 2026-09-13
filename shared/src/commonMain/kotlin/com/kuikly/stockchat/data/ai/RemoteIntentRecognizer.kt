@@ -1,7 +1,7 @@
 package com.kuikly.stockchat.data.ai
 
 import com.kuikly.stockchat.data.network.HttpClient
-import com.kuikly.stockchat.domain.chat.IntentLlmParser
+import com.kuikly.stockchat.data.parser.IntentLlmParser
 import com.kuikly.stockchat.domain.chat.IntentParser
 import com.kuikly.stockchat.domain.chat.ParsedIntent
 import com.kuikly.stockchat.domain.model.Instrument
@@ -54,7 +54,10 @@ class RemoteIntentRecognizer(
             你是股票问答应用的意图分类器。只输出一个 JSON 对象，不要 Markdown：
             {"intent":"STOCK_ANALYSIS|COMPARE|TREND|RISK|MARKET_OVERVIEW|LIMIT_UP_LADDER|CAPITAL_FLOW|KNOWLEDGE|GREETING|UNKNOWN","names":["标的名称或代码"],"topic":""}
             names 只填用户本轮真正要查的股票/指数（名称或代码均可，不必限于热门目录）；没有则空数组。可使用上下文标的补全代词。
-            不要编造不在用户问题或上下文中的公司。
+            不要编造不在用户问题或上下文中的公司；未点名的同业由客户端按板块补全。
+            后市、怎么走、走势、趋势、均线 → TREND。
+            同业、排名、对比、vs、对标 → COMPARE。
+            诊股、全面分析、综合分析 → STOCK_ANALYSIS。
         """.trimIndent()
     }
 }

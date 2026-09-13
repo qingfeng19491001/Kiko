@@ -5,7 +5,7 @@ import com.kuikly.stockchat.domain.model.Instrument
 import com.kuikly.stockchat.domain.model.KLineBar
 import com.kuikly.stockchat.domain.model.Quote
 import com.kuikly.stockchat.domain.prediction.PredictionResult
-import com.kuikly.stockchat.domain.prediction.StockPredictionParser
+import com.kuikly.stockchat.data.parser.StockPredictionParser
 import com.kuikly.stockchat.domain.util.DateUtil
 import com.kuikly.stockchat.domain.util.NumberFormat
 import com.tencent.kuikly.core.nvi.serialization.json.JSONArray

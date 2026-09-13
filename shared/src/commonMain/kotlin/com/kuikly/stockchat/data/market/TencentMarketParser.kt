@@ -23,15 +23,35 @@ object TencentMarketParser {
 
     const val QUOTE_BASE = "https://qt.gtimg.cn/q="
     const val KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    const val MKLINE_URL = "https://ifzq.gtimg.cn/appstock/app/kline/mkline"
     const val MINUTE_URL = "https://web.ifzq.gtimg.cn/appstock/app/minute/query"
 
     fun quoteUrl(instruments: List<Instrument>): String =
-        QUOTE_BASE + instruments.flatMap { quoteLookupKeys(it) }.distinct().joinToString(",")
+        QUOTE_BASE + instruments.flatMap { quoteRequestKeys(it) }.distinct().joinToString(",")
+
+    /**
+     * 实际请求键不能带交易所后缀：`usAAPL.OQ` 会回 `v_pv_none_match`，
+     * 必须打 `usAAPL`。回包匹配仍用 [quoteLookupKeys]。
+     */
+    fun quoteRequestKeys(instrument: Instrument): List<String> {
+        val keys = quoteLookupKeys(instrument).filter { '.' !in it }
+        return keys.ifEmpty { quoteLookupKeys(instrument) }
+    }
+
+    fun klineUrl(period: KLinePeriod): String =
+        if (period.isMinuteBar) MKLINE_URL else KLINE_URL
 
     fun klineParam(instrument: Instrument, period: KLinePeriod, count: Int): String {
-        val fq = if (instrument.isIndex) "" else "qfq"
-        return "${instrument.tencentSymbol},${period.apiKey},,,$count,$fq"
+        val fq = if (instrument.isIndex || period.isMinuteBar) "" else "qfq"
+        return "${klineSymbol(instrument)},${period.apiKey},,,$count,$fq"
     }
+
+    /**
+     * 美股指数日 K 必须打 `us.DJI`：`usDJI` 的 fqkline 往往只回当天一根，面积图会空。
+     */
+    fun klineSymbol(instrument: Instrument): String =
+        if (instrument.market == Market.US && instrument.isIndex) "us.${instrument.code}"
+        else instrument.tencentSymbol.substringBefore('.')
 
     // region 实时行情
 
@@ -60,7 +80,8 @@ object TencentMarketParser {
         val primary = instrument.tencentSymbol
         val byCode = instrument.market.tencentPrefix + instrument.code
         val withoutDot = primary.substringBefore('.')
-        return listOf(primary, byCode, withoutDot).distinct()
+        val dottedUs = if (instrument.market == Market.US) "us.${instrument.code}" else null
+        return listOfNotNull(primary, byCode, withoutDot, dottedUs).distinct()
     }
 
     fun quoteFields(raw: String, instrument: Instrument): List<String>? {

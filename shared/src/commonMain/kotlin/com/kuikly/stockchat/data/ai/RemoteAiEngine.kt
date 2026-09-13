@@ -49,7 +49,7 @@ class RemoteAiEngine(
         }
         val hasVision = attachments.any { it.hasImage }
         if (snapshots.isEmpty() && derived.isEmpty) {
-            callModel(systemPrompt(hasVision), userContentNoData(parsed, attachments)) { reply, error ->
+            callModel(systemPrompt(hasVision, parsed.intent), userContentNoData(parsed, attachments)) { reply, error ->
                 callback(
                     AiAnswer(
                         parsed.intent,
@@ -65,7 +65,7 @@ class RemoteAiEngine(
         }
 
         val base = AnswerComposer.compose(parsed, snapshots, derived)
-        callModel(systemPrompt(hasVision), userContentWithData(parsed, snapshots, attachments)) { reply, error ->
+        callModel(systemPrompt(hasVision, parsed.intent), userContentWithData(parsed, snapshots, attachments)) { reply, error ->
             callback(
                 if (reply != null) AnswerAssembler.merge(base, reply)
                 else AnswerAssembler.withFailureNotice(base, error),
@@ -73,18 +73,28 @@ class RemoteAiEngine(
         }
     }
 
-    private fun systemPrompt(hasVision: Boolean): String = buildString {
+    private fun systemPrompt(hasVision: Boolean, intent: Intent): String = buildString {
         appendLine("你是一位专业的中文股票市场分析助手，服务于散户投资者。请基于用户提供的实时行情数据，给出专业、客观、简洁的分析。")
         appendLine()
         appendLine("要求：")
-        appendLine("1. 只使用提供的真实行情数据进行分析，严禁编造任何不存在的数据、价格或事件")
+        appendLine("1. 只使用提供的真实行情数据进行分析，严禁编造任何不存在的数据、价格、财务科目（如毛利率、净利润）或事件")
         appendLine("2. 回答使用中文 Markdown（标题、列表、粗体），不要使用代码块")
-        appendLine("3. 必须按下面标题分段（不要省略标题）。客户端会把每段插到对应的实时数据卡/图前面：")
-        appendLine("## 盘面概览")
-        appendLine("## 技术面")
-        appendLine("## 估值与规模")
-        appendLine("## 核心结论")
-        appendLine("指数或没有估值数据时可跳过「估值与规模」。每段 2～5 句，全文控制在 400 字以内。")
+        when (intent) {
+            Intent.TREND -> {
+                appendLine("3. 只输出 ## 后市判断 一段，2～4 句判断。不要复述均线/RSI 数字（客户端图表已展示），不要写估值段。")
+            }
+            Intent.COMPARE -> {
+                appendLine("3. 只输出 ## 同业格局 一段，2～4 句。不要编造未提供的财务数据，不要写成单只报价卡。")
+            }
+            else -> {
+                appendLine("3. 必须按下面标题分段（不要省略标题）。客户端会把每段插到对应的实时数据卡/图前面：")
+                appendLine("## 盘面概览")
+                appendLine("## 技术面")
+                appendLine("## 估值与规模")
+                appendLine("## 核心结论")
+                appendLine("指数或没有估值数据时可跳过「估值与规模」。每段 2～5 句，全文控制在 400 字以内。技术面只写判断，不要复述 MA/RSI 数字。")
+            }
+        }
         appendLine("4. 行情卡片、评分和图表由客户端展示，不要再列报价表或重复价格网格")
         appendLine("5. 保持中立客观，不要给出明确买卖指令，应提示投资风险")
         appendLine("6. 如数据缺失，需明确说明「数据缺失」，不要臆测")
@@ -108,11 +118,11 @@ class RemoteAiEngine(
         attachments: List<LoadedAttachment>,
     ): UserContent {
         val task = when (parsed.intent) {
-            Intent.COMPARE -> "请对以上两只标的做横向对比分析，包括涨跌表现、估值水平、技术面强弱。"
-            Intent.TREND -> "请基于以上数据做趋势判断，分析短期与中期走势。"
+            Intent.COMPARE -> "请基于以上多只标的的真实行情做同业对比，只谈相对涨跌、估值高低与体量，不要编造毛利率等没有的科目。"
+            Intent.TREND -> "请基于以上数据做后市判断，只写结论，不要复述均线数字，不要先写估值。"
             Intent.RISK -> "请梳理该标的主要风险点，按价格波动、估值、行业三个维度展开。"
             Intent.MARKET_OVERVIEW -> "请分析该指数/大盘的走势与短期展望。"
-            Intent.STOCK_ANALYSIS -> "请对该标的做综合分析，涵盖盘面、技术面、估值与关注要点。"
+            Intent.STOCK_ANALYSIS -> "请对该标的做综合诊股，涵盖盘面、技术面判断、估值与关注要点；技术面不要复述均线数字。"
             else -> "请回答用户的问题。"
         }
         return AttachmentPromptBuilder.build(

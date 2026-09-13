@@ -12,6 +12,7 @@ import com.kuikly.stockchat.domain.chat.AnswerBlock
 import com.kuikly.stockchat.domain.chat.BarColor
 import com.kuikly.stockchat.domain.chat.BarEntry
 import com.kuikly.stockchat.domain.chat.CapitalFlow
+import com.kuikly.stockchat.domain.chat.ChartSeries
 import com.kuikly.stockchat.domain.chat.ChatMessage
 import com.kuikly.stockchat.domain.chat.CompareRow
 import com.kuikly.stockchat.domain.chat.Conversation
@@ -21,9 +22,14 @@ import com.kuikly.stockchat.domain.chat.LadderLevel
 import com.kuikly.stockchat.domain.chat.LadderStock
 import com.kuikly.stockchat.domain.chat.MessageStatus
 import com.kuikly.stockchat.domain.chat.Metric
+import com.kuikly.stockchat.domain.chat.PeerRow
 import com.kuikly.stockchat.domain.chat.Role
+import com.kuikly.stockchat.domain.chat.ResearchReport
+import com.kuikly.stockchat.domain.chat.ResearchSource
+import com.kuikly.stockchat.domain.chat.ResearchSourceKind
+import com.kuikly.stockchat.domain.chat.SeriesChartKind
 import com.kuikly.stockchat.domain.model.InstrumentCache
-import com.kuikly.stockchat.domain.model.InstrumentCodec
+import com.kuikly.stockchat.data.codec.InstrumentCodec
 import com.kuikly.stockchat.domain.model.KLineBar
 import com.kuikly.stockchat.domain.model.Quote
 import com.kuikly.stockchat.domain.model.StockCatalog
@@ -73,6 +79,7 @@ object ChatCodec {
         put("error", message.errorMessage)
         put("attachments", JSONArray().apply { message.attachments.forEach { put(encode(it)) } })
         put("blocks", JSONArray().apply { message.blocks.forEach { put(encode(it)) } })
+        message.researchReport?.let { put("research", encode(it)) }
     }
 
     fun decodeMessage(json: JSONObject): ChatMessage? {
@@ -96,8 +103,41 @@ object ChatCodec {
             createdAt = json.optLong("createdAt"),
             errorMessage = json.optString("error"),
             attachments = attachments,
+            researchReport = json.optJSONObject("research")?.let(::decodeResearch),
         )
     }
+
+    private fun encode(report: ResearchReport): JSONObject = JSONObject().apply {
+        put("elapsedMs", report.elapsedMs)
+        put("instrumentCount", report.instrumentCount)
+        put("dataPointCount", report.dataPointCount)
+        put("sources", JSONArray().apply {
+            report.sources.forEach { source ->
+                put(JSONObject().apply {
+                    put("title", source.title)
+                    put("detail", source.detail)
+                    put("kind", source.kind.name)
+                })
+            }
+        })
+    }
+
+    private fun decodeResearch(json: JSONObject): ResearchReport = ResearchReport(
+        elapsedMs = json.optLong("elapsedMs"),
+        instrumentCount = json.optInt("instrumentCount"),
+        dataPointCount = json.optInt("dataPointCount"),
+        sources = json.optJSONArray("sources")?.let { array ->
+            (0 until array.length()).mapNotNull { index ->
+                array.optJSONObject(index)?.let { source ->
+                    ResearchSource(
+                        title = source.optString("title"),
+                        detail = source.optString("detail"),
+                        kind = enumOrNull<ResearchSourceKind>(source.optString("kind")) ?: ResearchSourceKind.QUOTE,
+                    )
+                }
+            }
+        } ?: emptyList(),
+    )
 
     private fun encode(attachment: Attachment): JSONObject = JSONObject().apply {
         put("id", attachment.id)
@@ -193,6 +233,7 @@ object ChatCodec {
                 put("index", block.index)
                 put("title", block.title)
                 put("subtitle", block.subtitle)
+                put("collapsed", block.collapsedByDefault)
             }
             is AnswerBlock.SummaryCallout -> {
                 put("type", "callout")
@@ -272,6 +313,51 @@ object ChatCodec {
                     }
                 })
             }
+            is AnswerBlock.PeerTableCard -> {
+                put("type", "peertable")
+                put("title", block.title)
+                put("rows", JSONArray().apply {
+                    block.rows.forEach {
+                        put(JSONObject().apply {
+                            put("key", it.instrumentKey)
+                            put("name", it.name)
+                            put("price", it.price)
+                            put("changePct", it.changePct)
+                            put("change", it.change)
+                            put("turnover", it.turnover)
+                            put("pe", it.pe)
+                            put("marketCap", it.marketCap)
+                        })
+                    }
+                })
+            }
+            is AnswerBlock.SeriesChartCard -> {
+                put("type", "series")
+                put("title", block.title)
+                put("subtitle", block.subtitle)
+                put("unit", block.unit)
+                put("kind", block.kind.name)
+                put("categories", JSONArray().apply { block.categories.forEach { put(it) } })
+                put("series", JSONArray().apply {
+                    block.series.forEach { series ->
+                        put(JSONObject().apply {
+                            put("name", series.name)
+                            put("key", series.instrumentKey)
+                            put("color", series.colorArgb)
+                            put("values", JSONArray().apply {
+                                series.values.forEach { v ->
+                                    put(JSONObject().apply { if (v != null) put("v", v) })
+                                }
+                            })
+                        })
+                    }
+                })
+            }
+            is AnswerBlock.HighlightsCard -> {
+                put("type", "highlights")
+                put("title", block.title)
+                put("items", JSONArray().apply { block.items.forEach { put(it) } })
+            }
         }
     }
 
@@ -323,6 +409,7 @@ object ChatCodec {
             index = json.optInt("index"),
             title = json.optString("title"),
             subtitle = json.optString("subtitle"),
+            collapsedByDefault = json.optBoolean("collapsed"),
         )
         "callout" -> AnswerBlock.SummaryCallout(json.optString("text"))
         "barchart" -> AnswerBlock.BarChartCard(
@@ -400,6 +487,61 @@ object ChatCodec {
                         )
                     }
                 }
+            } ?: emptyList(),
+        )
+        "peertable" -> AnswerBlock.PeerTableCard(
+            title = json.optString("title"),
+            rows = json.optJSONArray("rows")?.let { arr ->
+                (0 until arr.length()).mapNotNull { i ->
+                    arr.optJSONObject(i)?.let {
+                        PeerRow(
+                            instrumentKey = it.optString("key"),
+                            name = it.optString("name"),
+                            price = it.optString("price"),
+                            changePct = it.optString("changePct"),
+                            change = it.optDouble("change"),
+                            turnover = it.optString("turnover"),
+                            pe = it.optString("pe"),
+                            marketCap = it.optString("marketCap"),
+                        )
+                    }
+                }
+            } ?: emptyList(),
+        )
+        "series" -> AnswerBlock.SeriesChartCard(
+            title = json.optString("title"),
+            subtitle = json.optString("subtitle"),
+            unit = json.optString("unit"),
+            kind = enumOrNull<SeriesChartKind>(json.optString("kind")) ?: SeriesChartKind.LINE,
+            categories = json.optJSONArray("categories")?.let { arr ->
+                (0 until arr.length()).mapNotNull { arr.optString(it) }
+            } ?: emptyList(),
+            series = json.optJSONArray("series")?.let { arr ->
+                (0 until arr.length()).mapNotNull { i ->
+                    arr.optJSONObject(i)?.let { s ->
+                        ChartSeries(
+                            name = s.optString("name"),
+                            instrumentKey = s.optString("key"),
+                            colorArgb = s.optLong("color"),
+                            values = s.optJSONArray("values")?.let { vals ->
+                                (0 until vals.length()).map { j ->
+                                    val obj = vals.optJSONObject(j)
+                                    if (obj != null) {
+                                        if (obj.has("v")) obj.optDouble("v") else null
+                                    } else {
+                                        vals.optDouble(j)
+                                    }
+                                }
+                            } ?: emptyList(),
+                        )
+                    }
+                }
+            } ?: emptyList(),
+        )
+        "highlights" -> AnswerBlock.HighlightsCard(
+            title = json.optString("title").ifEmpty { "关键亮点" },
+            items = json.optJSONArray("items")?.let { arr ->
+                (0 until arr.length()).mapNotNull { arr.optString(it) }
             } ?: emptyList(),
         )
         else -> null

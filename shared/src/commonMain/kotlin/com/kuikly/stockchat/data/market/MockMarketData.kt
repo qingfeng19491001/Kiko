@@ -48,6 +48,13 @@ object MockMarketData {
         "sh000001" to Seed(3420.0, null, null, null, 4.9e11, 0.0003),
         "sz399001" to Seed(10350.0, null, null, null, 6.6e11, 0.0002),
         "sz399006" to Seed(2080.0, null, null, null, 2.8e11, 0.0005),
+        "sh000300" to Seed(4510.0, null, null, null, 5.2e11, -0.0004),
+        "sh000905" to Seed(7580.0, null, null, null, 3.5e11, -0.0008),
+        "sh000852" to Seed(7427.0, null, null, null, 4.2e11, -0.0010),
+        "hkHSCEI" to Seed(8240.0, null, null, null, 6.2e9, -0.0002),
+        "usDJI" to Seed(52570.0, null, null, null, 3.5e8, 0.0004),
+        "usIXIC" to Seed(26330.0, null, null, null, 5.6e9, 0.0005),
+        "usNDX" to Seed(29370.0, null, null, null, 1.1e9, 0.0004),
     )
 
     fun snapshot(instrument: Instrument): MarketSnapshot {
@@ -88,7 +95,7 @@ object MockMarketData {
             KLinePeriod.QUARTER -> aggregate(daily, 63).takeLast(count)
             KLinePeriod.YEAR -> aggregate(daily, 250).takeLast(count)
             // 五日 = 5 分钟级别连续走势；分钟级周期按各自分钟跨度生成
-            KLinePeriod.FIVE_DAY -> minuteBars(instrument, 5, count)
+            KLinePeriod.FIVE_DAY -> daily.takeLast(count.coerceAtLeast(5))
             KLinePeriod.MIN_1 -> minuteBars(instrument, 1, count)
             KLinePeriod.MIN_5 -> minuteBars(instrument, 5, count)
             KLinePeriod.MIN_15 -> minuteBars(instrument, 15, count)
@@ -122,6 +129,12 @@ object MockMarketData {
             price = close
         }
         return bars
+    }
+
+    fun aggregateForPeriod(bars: List<KLineBar>, period: KLinePeriod): List<KLineBar> = when (period) {
+        KLinePeriod.QUARTER -> aggregate(bars, 3)
+        KLinePeriod.YEAR -> aggregate(bars, 12)
+        else -> bars
     }
 
     private fun aggregate(daily: List<KLineBar>, size: Int): List<KLineBar> =

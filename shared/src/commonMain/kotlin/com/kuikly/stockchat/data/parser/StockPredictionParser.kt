@@ -1,4 +1,7 @@
-package com.kuikly.stockchat.domain.prediction
+package com.kuikly.stockchat.data.parser
+
+import com.kuikly.stockchat.domain.prediction.PredictionPoint
+import com.kuikly.stockchat.domain.prediction.StockPrediction
 
 import com.tencent.kuikly.core.nvi.serialization.json.JSONObject
 

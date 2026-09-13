@@ -31,6 +31,12 @@ class MarketRepository(private val http: HttpClient) {
     // region 快照
 
     fun loadSnapshot(instrument: Instrument, callback: (MarketSnapshot) -> Unit) {
+        loadSnapshot(instrument, allowMock = true) { snapshot ->
+            if (snapshot != null) callback(snapshot)
+        }
+    }
+
+    fun loadSnapshot(instrument: Instrument, allowMock: Boolean, callback: (MarketSnapshot?) -> Unit) {
         var quote: Quote? = null
         var bars: List<KLineBar>? = null
         var pending = 2
@@ -41,9 +47,10 @@ class MarketRepository(private val http: HttpClient) {
             val liveQuote = quote
             when {
                 liveQuote != null && liveBars != null -> callback(MarketSnapshot(liveQuote, liveBars, null))
-                liveQuote != null -> callback(MarketSnapshot(liveQuote, MockMarketData.dailyBars(instrument, 320), null))
+                liveQuote != null -> callback(MarketSnapshot(liveQuote, emptyList(), null))
                 liveBars != null -> callback(MarketSnapshot(quoteFromBars(instrument, liveBars), liveBars, null))
-                else -> callback(MockMarketData.snapshot(instrument))
+                allowMock -> callback(MockMarketData.snapshot(instrument))
+                else -> callback(null)
             }
         }
         loadQuote(instrument) { quote = it; finish() }
@@ -51,6 +58,14 @@ class MarketRepository(private val http: HttpClient) {
     }
 
     fun loadSnapshots(instruments: List<Instrument>, callback: (List<MarketSnapshot>) -> Unit) {
+        loadSnapshots(instruments, allowMock = true, callback)
+    }
+
+    fun loadSnapshots(
+        instruments: List<Instrument>,
+        allowMock: Boolean,
+        callback: (List<MarketSnapshot>) -> Unit,
+    ) {
         if (instruments.isEmpty()) {
             callback(emptyList())
             return
@@ -58,7 +73,7 @@ class MarketRepository(private val http: HttpClient) {
         val results = arrayOfNulls<MarketSnapshot>(instruments.size)
         var pending = instruments.size
         instruments.forEachIndexed { index, instrument ->
-            loadSnapshot(instrument) { snapshot ->
+            loadSnapshot(instrument, allowMock) { snapshot ->
                 results[index] = snapshot
                 pending -= 1
                 if (pending == 0) callback(results.filterNotNull())
@@ -71,21 +86,58 @@ class MarketRepository(private val http: HttpClient) {
     // region 实时行情
 
     fun loadQuote(instrument: Instrument, callback: (Quote?) -> Unit) {
-        val now = DateTime.currentTimestamp()
-        quoteCache[instrument.key]?.let { if (now - it.at < cacheTtlMs) { callback(it.value); return } }
-        if (offlineMode) {
-            callback(null)
+        loadQuotes(listOf(instrument)) { map -> callback(map[instrument.key]) }
+    }
+
+    /** 腾讯 `qt` 批量报价，行情列表一次拉齐名称对应的价 / 涨跌额 / 涨跌幅。 */
+    fun loadQuotes(instruments: List<Instrument>, callback: (Map<String, Quote>) -> Unit) {
+        if (instruments.isEmpty()) {
+            callback(emptyMap())
             return
         }
-        http.get(TencentMarketParser.quoteUrl(listOf(instrument))) { text, _ ->
-            val quote = text?.let { raw ->
-                runCatching {
-                    val fields = TencentMarketParser.quoteFields(raw, instrument)
-                    fields?.let { TencentMarketParser.parseQuote(instrument, it) }
-                }.getOrNull()
+        val now = DateTime.currentTimestamp()
+        val cached = linkedMapOf<String, Quote>()
+        val pending = ArrayList<Instrument>()
+        instruments.forEach { instrument ->
+            val hit = quoteCache[instrument.key]
+            if (hit != null && now - hit.at < cacheTtlMs) cached[instrument.key] = hit.value
+            else pending += instrument
+        }
+        if (pending.isEmpty() || offlineMode) {
+            callback(cached)
+            return
+        }
+        http.get(TencentMarketParser.quoteUrl(pending)) { text, _ ->
+            val fresh = linkedMapOf<String, Quote>()
+            text?.let { raw ->
+                pending.forEach { instrument ->
+                    val quote = runCatching {
+                        val fields = TencentMarketParser.quoteFields(raw, instrument)
+                        fields?.let { TencentMarketParser.parseQuote(instrument, it) }
+                    }.getOrNull()
+                    if (quote != null) {
+                        quoteCache[instrument.key] = Cached(quote, DateTime.currentTimestamp())
+                        fresh[instrument.key] = quote
+                    }
+                }
             }
-            if (quote != null) quoteCache[instrument.key] = Cached(quote, DateTime.currentTimestamp())
-            callback(quote)
+            callback(cached + fresh)
+        }
+    }
+
+    fun loadQuotesOrMock(instruments: List<Instrument>, callback: (quotes: Map<String, Quote>, usedMock: Boolean) -> Unit) {
+        loadQuotes(instruments) { live ->
+            var usedMock = false
+            val filled = linkedMapOf<String, Quote>()
+            instruments.forEach { instrument ->
+                val quote = live[instrument.key]
+                if (quote != null) filled[instrument.key] = quote
+                else {
+                    usedMock = true
+                    filled[instrument.key] = MockMarketData.snapshot(instrument).quote
+                }
+            }
+            callback(filled, usedMock)
         }
     }
 
@@ -103,14 +155,26 @@ class MarketRepository(private val http: HttpClient) {
             return
         }
         http.get(
-            TencentMarketParser.KLINE_URL,
+            TencentMarketParser.klineUrl(actualPeriod),
             mapOf("param" to TencentMarketParser.klineParam(instrument, actualPeriod, count)),
         ) { text, _ ->
             val bars = text?.let { raw ->
                 runCatching { TencentMarketParser.parseKLine(instrument, actualPeriod, JSONObject(raw)) }.getOrNull()
             }
-            if (bars != null) barsCache[cacheKey] = Cached(bars, DateTime.currentTimestamp())
-            callback(bars)
+            if (bars != null) {
+                barsCache[cacheKey] = Cached(bars, DateTime.currentTimestamp())
+                callback(bars)
+                return@get
+            }
+            if (actualPeriod == KLinePeriod.QUARTER || actualPeriod == KLinePeriod.YEAR) {
+                loadBars(instrument, KLinePeriod.MONTH, 240) { months ->
+                    val aggregated = months?.let { MockMarketData.aggregateForPeriod(it, actualPeriod) }
+                    if (aggregated != null) barsCache[cacheKey] = Cached(aggregated, DateTime.currentTimestamp())
+                    callback(aggregated)
+                }
+                return@get
+            }
+            callback(null)
         }
     }
 
@@ -174,24 +238,24 @@ class MarketRepository(private val http: HttpClient) {
 
     // endregion
 
-    /** 实时行情失败但日 K 成功时，用最后两根 K 线推导报价，不再混入演示 PE / 市值。 */
+    /** 实时行情失败但日 K 成功时，用 K 线推导报价，不再混入演示 PE / 市值。 */
     private fun quoteFromBars(instrument: Instrument, bars: List<KLineBar>): Quote {
-        if (bars.size < 2) return MockMarketData.snapshot(instrument).quote
         val last = bars.last()
-        val prev = bars[bars.size - 2]
-        val change = last.close - prev.close
+        val prev = bars.getOrNull(bars.size - 2)
+        val prevClose = prev?.close ?: last.open
+        val change = last.close - prevClose
         return Quote(
             instrument = instrument,
             price = last.close,
-            prevClose = prev.close,
+            prevClose = prevClose,
             open = last.open,
             high = last.high,
             low = last.low,
             change = change,
-            changePct = if (prev.close > 0) change / prev.close * 100 else 0.0,
+            changePct = if (prevClose > 0) change / prevClose * 100 else 0.0,
             volume = last.volume,
             turnover = last.volume * (last.high + last.low) / 2,
-            amplitude = if (prev.close > 0) (last.high - last.low) / prev.close * 100 else null,
+            amplitude = if (prevClose > 0) (last.high - last.low) / prevClose * 100 else null,
             updateTime = last.date.takeLast(5).replace('/', '-') + " 收盘",
             tradingStatus = "${instrument.market.label}已收盘",
             isMock = false,

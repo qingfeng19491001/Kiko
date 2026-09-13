@@ -49,25 +49,31 @@ class ConversationRepository(private val store: KeyValueStore) {
 
     fun find(id: String): Conversation? = loadAll().firstOrNull { it.id == id }
 
-    fun save(conversation: Conversation) {
+    fun save(conversation: Conversation): List<Conversation> {
         val list = loadAll().toMutableList()
         list.removeAll { it.id == conversation.id }
         list.add(0, conversation)
-        while (list.size > maxConversations) list.removeAt(list.size - 1)
+        val pruned = mutableListOf<Conversation>()
+        while (list.size > maxConversations) pruned += list.removeAt(list.size - 1)
         cache = list
         persist(list)
+        return pruned
     }
 
-    fun delete(id: String) {
+    fun delete(id: String): Conversation? {
         val list = loadAll().toMutableList()
+        val deleted = list.firstOrNull { it.id == id }
         list.removeAll { it.id == id }
         cache = list
         persist(list)
+        return deleted
     }
 
-    fun clear() {
+    fun clear(): List<Conversation> {
+        val previous = loadAll().toList()
         cache = mutableListOf()
         persist(emptyList())
+        return previous
     }
 
     private fun persist(list: List<Conversation>) {
