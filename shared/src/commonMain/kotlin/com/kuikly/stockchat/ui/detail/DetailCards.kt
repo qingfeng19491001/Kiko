@@ -2,16 +2,16 @@ package com.kuikly.stockchat.ui.detail
 
 import com.kuikly.stockchat.domain.analysis.TechnicalAnalysis
 import com.kuikly.stockchat.domain.analysis.TrendBias
+import com.kuikly.stockchat.domain.model.CapitalFlowData
 import com.kuikly.stockchat.domain.model.Instrument
 import com.kuikly.stockchat.domain.model.KLinePeriod
+import com.kuikly.stockchat.domain.model.PeerUniverse
 import com.kuikly.stockchat.domain.model.Quote
 import com.kuikly.stockchat.domain.model.SelectedChartPoint
 import com.kuikly.stockchat.domain.util.NumberFormat
-import com.kuikly.stockchat.ui.components.Card
 import com.kuikly.stockchat.ui.components.Icon
 import com.kuikly.stockchat.ui.components.IconKind
-import com.kuikly.stockchat.ui.components.BrandMark
-import com.kuikly.stockchat.ui.components.PillButton
+import com.kuikly.stockchat.ui.components.InstrumentAvatar
 import com.kuikly.stockchat.ui.components.TagChip
 import com.kuikly.stockchat.ui.theme.AppTheme
 import com.tencent.kuikly.core.base.Border
@@ -21,158 +21,371 @@ import com.tencent.kuikly.core.base.Color
 import com.tencent.kuikly.core.base.ViewContainer
 import com.tencent.kuikly.core.directives.vbind
 import com.tencent.kuikly.core.directives.vif
+import com.tencent.kuikly.core.views.DivView
 import com.tencent.kuikly.core.views.Text
 import com.tencent.kuikly.core.views.View
 
-// region 头部行情
-
-
-/** KuiklyKLineChart 完整 Demo 同款行情头部：左侧 120f 大价格，右侧 3×3 横向指标。 */
-fun ViewContainer<*, *>.DemoQuoteOverview(quote: Quote) {
-    val changeColor = AppTheme.changeColor(quote.change)
-    View {
-        attr {
-            height(104f)
-            paddingLeft(12f); paddingRight(12f); paddingTop(10f); paddingBottom(8f)
-            backgroundColor(AppTheme.surface)
-            flexDirectionRow(); alignItemsCenter()
-        }
-        View {
-            attr { width(120f); height(86f); justifyContentCenter() }
-            Text {
-                val priceText = NumberFormat.price(quote.price)
-                attr {
-                    text(priceText)
-                    // 茅台这类千元标的价格 7 个字符，34f 会超出 120f 宽度，缩到 28f 防换行
-                    fontSize(if (priceText.length > 6) 28f else 34f)
-                    fontWeight600()
-                    color(changeColor)
-                }
-            }
-            View {
-                attr { height(22f); flexDirectionRow(); alignItemsCenter(); marginTop(2f) }
-                Text { attr { text(NumberFormat.signed(quote.change)); fontSize(13f); fontWeight600(); color(changeColor) } }
-                Text { attr { text(NumberFormat.signedPct(quote.changePct)); fontSize(13f); fontWeight600(); marginLeft(8f); color(changeColor) } }
-            }
-        }
-        View {
-            attr { flex(1f); height(86f); marginLeft(4f); justifyContentCenter() }
-            demoQuoteMetrics(quote).chunked(3).forEach { row ->
-                View {
-                    attr { height(27f); flexDirectionRow(); alignItemsCenter() }
-                    row.forEach { (label, value) -> DemoQuoteMetric(label, value) }
-                }
-            }
-        }
-    }
-}
-
-private fun demoQuoteMetrics(quote: Quote): List<Pair<String, String>> = listOf(
-    "高" to NumberFormat.price(quote.high),
-    "总值" to NumberFormat.capFromYi(quote.totalMarketCap ?: quote.marketCap),
-    "量比" to "--",
-    "低" to NumberFormat.price(quote.low),
-    "流通" to NumberFormat.capFromYi(quote.marketCap),
-    "换手" to NumberFormat.pct(quote.turnoverRate),
-    "开" to NumberFormat.price(quote.open),
-    "量" to NumberFormat.compact(quote.volume),
-    "额" to NumberFormat.compact(quote.turnover),
-)
-
-/** 官方 Demo 的指标 cell：label(9f，固定 23f 宽) + value(10f 半粗) 横向排列 */
-private fun ViewContainer<*, *>.DemoQuoteMetric(label: String, value: String) {
-    View {
-        attr { flex(1f); height(27f); flexDirectionRow(); alignItemsCenter() }
-        Text { attr { text(label); fontSize(9f); color(Color(0xFF8A94A6L)); width(23f) } }
-        Text { attr { text(value); fontSize(10f); fontWeight600(); color(Color(0xFF374151L)) } }
-    }
-}
-
-// endregion
-
-// region 周期 Tab
 
 /**
- * KuiklyKLineChart 完整 Demo 同款周期栏：
- * 34f 高通栏 + 底部 1px 细线，选中项蓝色加粗；“更多 ▾”弹出分钟级 / 季K / 年K 菜单。
+ * 详情页基础行情下方的页内 Tab。
+ * 一级：诊股 / 简况 / 技术 / 资金 / 板块；二级随一级切换，避免长页堆叠。
  */
-fun ViewContainer<*, *>.PeriodTabs(
-    selected: () -> KLinePeriod,
-    periodMenuOpen: () -> Boolean,
-    onTogglePeriodMenu: () -> Unit,
-    onSelect: (KLinePeriod) -> Unit,
+internal enum class DetailTab(val label: String, val subTabs: List<String>) {
+    DIAGNOSIS("诊股", listOf("全部", "解读", "预测", "追问", "风险")),
+    PROFILE("简况", listOf("全部", "指标", "估值")),
+    TECH("技术", emptyList()),
+    FLOW("资金", emptyList()),
+    SECTOR("板块", emptyList()),
+}
+
+internal fun ViewContainer<*, *>.DetailTabBar(
+    selectedTab: () -> DetailTab,
+    selectedSubTab: () -> String,
+    onSelectTab: (DetailTab) -> Unit,
+    onSelectSubTab: (String) -> Unit,
 ) {
-    val activeBlue = Color(0xFF1677FFL)
-    val inactiveGray = Color(0xFF8C8C8CL)
+    val muted = AppTheme.textTertiary
     View {
-        attr { height(34f); backgroundColor(AppTheme.surface) }
+        attr { backgroundColor(AppTheme.surface) }
+        View { attr { height(0.5f); backgroundColor(AppTheme.divider) } }
         View {
             attr {
-                absolutePositionAllZero()
-                flexDirectionRow(); alignItemsCenter()
-                borderBottom(Border(1f, BorderStyle.SOLID, Color(0xFFE5E7EBL)))
+                height(44f)
+                flexDirectionRow()
+                borderBottom(Border(0.5f, BorderStyle.SOLID, AppTheme.divider))
             }
-            KLinePeriod.mainTabs.forEach { period ->
-                vbind({ selected() == period }) {
+            DetailTab.entries.forEach { tab ->
+                vbind({ selectedTab() == tab }) {
+                    val active = selectedTab() == tab
                     View {
-                        attr { flex(1f); height(34f); allCenter() }
-                        event { click { onSelect(period) } }
+                        attr { flex(1f); height(44f); allCenter() }
+                        event { click { onSelectTab(tab) } }
                         Text {
                             attr {
-                                val active = selected() == period
-                                text(period.label)
-                                fontSize(12f)
-                                color(if (active) activeBlue else inactiveGray)
-                                if (active) fontWeight600()
+                                text(tab.label)
+                                fontSize(if (active) 15f else 14f)
+                                color(if (active) AppTheme.textPrimary else muted)
+                                if (active) fontWeight700()
                             }
                         }
-                    }
-                }
-            }
-            // 更多 ▾
-            vbind({ selected().isExtended }) {
-                View {
-                    attr { flex(1f); height(34f); allCenter(); flexDirectionRow() }
-                    event { click { onTogglePeriodMenu() } }
-                    val extended = selected().isExtended
-                    Text {
-                        attr {
-                            text(if (extended) selected().label else "更多")
-                            fontSize(12f)
-                            color(if (extended) activeBlue else inactiveGray)
-                            if (extended) fontWeight600()
-                        }
-                    }
-                    Text { attr { text("▾"); fontSize(9f); marginLeft(2f); color(if (extended) activeBlue else inactiveGray) } }
-                }
-            }
-        }
-        vif({ periodMenuOpen() }) {
-            View {
-                attr {
-                    positionAbsolute(); top(34f); right(0f); zIndex(50)
-                    width(82f); padding(8f); flexDirectionColumn()
-                    borderRadius(8f); backgroundColor(AppTheme.surface)
-                    boxShadow(BoxShadow(0f, 2f, 8f, Color(0x1F000000L)))
-                }
-                KLinePeriod.extendedTabs.forEach { period ->
-                    vbind({ selected() == period }) {
                         View {
                             attr {
-                                height(30f); allCenter(); borderRadius(5f)
-                                backgroundColor(if (selected() == period) Color(0x1A1677FFL) else Color.TRANSPARENT)
+                                absolutePosition(left = 0f, right = 0f, bottom = 0f)
+                                height(2.5f)
+                                alignItemsCenter()
                             }
-                            event { click { onSelect(period) } }
-                            Text {
+                            View {
                                 attr {
-                                    text(period.label)
-                                    fontSize(12f)
-                                    color(if (selected() == period) activeBlue else Color(0xFF595959L))
+                                    width(18f)
+                                    height(2.5f)
+                                    borderRadius(1.5f)
+                                    backgroundColor(if (active) AppTheme.ink else Color.TRANSPARENT)
                                 }
                             }
                         }
                     }
                 }
+            }
+        }
+        vbind({ selectedTab().name }) {
+            val subs = selectedTab().subTabs
+            if (subs.isEmpty()) {
+                View { attr { height(0f) } }
+            } else {
+                View {
+                    attr {
+                        height(36f)
+                        flexDirectionRow()
+                        alignItemsCenter()
+                        paddingLeft(6f)
+                        paddingRight(8f)
+                        borderBottom(Border(0.5f, BorderStyle.SOLID, AppTheme.divider))
+                    }
+                    subs.forEach { label ->
+                        vbind({ selectedSubTab() == label }) {
+                            val active = selectedSubTab() == label
+                            View {
+                                attr {
+                                    height(36f)
+                                    paddingLeft(10f)
+                                    paddingRight(10f)
+                                    justifyContentCenter()
+                                }
+                                event { click { onSelectSubTab(label) } }
+                                Text {
+                                    attr {
+                                        text(label)
+                                        fontSize(12f)
+                                        color(if (active) AppTheme.textPrimary else muted)
+                                        if (active) fontWeight600()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+internal fun ViewContainer<*, *>.renderDiagnosisPane(
+    vm: StockDetailViewModel,
+    instrument: Instrument,
+    subTab: String,
+    onAsk: (String) -> Unit,
+    onAskSelection: () -> Unit,
+) {
+    val showAll = subTab == "全部"
+    if (showAll || subTab == "解读") {
+        val analysis = vm.analysis
+        if (analysis != null) {
+            AiInsightCard(vm.insight, analysis, instrument, onAsk)
+        }
+    }
+    if (showAll || subTab == "预测") {
+        PredictionCard(vm)
+    }
+    if (showAll || subTab == "追问") {
+        if (vm.stripPoints().isNotEmpty()) {
+            ChartFollowUpBar(vm, onAskSelection)
+        } else if (subTab == "追问") {
+            DetailEmptyHint("暂无可用点位。切换到日 K 后可点选再带回对话。")
+        }
+    }
+    if (showAll || subTab == "风险") {
+        if (vm.risks.isEmpty() && subTab == "风险") {
+            DetailEmptyHint("暂无风险提示。")
+        } else {
+            RiskCard(vm.risks)
+        }
+    }
+}
+
+internal fun ViewContainer<*, *>.renderProfilePane(quote: Quote, analysis: TechnicalAnalysis?, subTab: String) {
+    val showAll = subTab == "全部"
+    if (showAll || subTab == "指标") {
+        MetricsCard(quote, analysis)
+    }
+    if (showAll || subTab == "估值") {
+        ValuationCard(quote)
+    }
+}
+
+internal fun ViewContainer<*, *>.renderTechPane(quote: Quote, analysis: TechnicalAnalysis, period: KLinePeriod) {
+    TechnicalCard(quote, analysis, period)
+}
+
+internal fun ViewContainer<*, *>.renderFlowPane(
+    quote: Quote,
+    flow: CapitalFlowData?,
+    loading: Boolean,
+    onAsk: () -> Unit,
+) {
+    TabBlock {
+        TabHeading("资金与活跃度")
+        View {
+            attr { flexDirectionRow(); marginTop(12f) }
+            ValuationCell("成交额", NumberFormat.compact(quote.turnover), null)
+            ValuationCell("成交量", NumberFormat.compact(quote.volume), null)
+            ValuationCell("换手率", NumberFormat.pct(quote.turnoverRate), null)
+        }
+        View {
+            attr { flexDirectionRow(); marginTop(12f) }
+            ValuationCell("振幅", NumberFormat.pct(quote.amplitude), null)
+            ValuationCell("量比", "--", null)
+            View { attr { flex(1f) } }
+        }
+        when {
+            loading -> Text {
+                attr {
+                    text("正在获取主力资金流向…")
+                    fontSize(12f)
+                    color(AppTheme.textTertiary)
+                    marginTop(12f)
+                }
+            }
+            flow != null && flow.flows.isNotEmpty() -> {
+                Text {
+                    attr {
+                        text("主力资金（${flow.date}）")
+                        fontSize(12f)
+                        fontWeight600()
+                        color(AppTheme.textPrimary)
+                        marginTop(14f)
+                    }
+                }
+                flow.flows.forEach { item ->
+                    val color = AppTheme.changeColor(item.netInflow)
+                    val amount = (if (item.netInflow > 0) "+" else "") + NumberFormat.compact(item.netInflow)
+                    val pct = (if (item.pct > 0) "+" else "") + NumberFormat.fixed(item.pct, 2) + "%"
+                    View {
+                        attr {
+                            flexDirectionRow()
+                            alignItemsCenter()
+                            marginTop(10f)
+                        }
+                        Text { attr { text(item.label); fontSize(13f); color(AppTheme.textSecondary); width(52f) } }
+                        Text {
+                            attr {
+                                text(amount)
+                                fontSize(13f)
+                                fontWeight600()
+                                color(color)
+                                flex(1f)
+                            }
+                        }
+                        Text { attr { text(pct); fontSize(12f); fontWeight600(); color(color) } }
+                    }
+                }
+            }
+            else -> Text {
+                attr {
+                    text("资金流向当前未接入。指数与日 K 不受影响，也可向对话询问该股后市。")
+                    fontSize(12f)
+                    lineHeight(18f)
+                    color(AppTheme.textTertiary)
+                    marginTop(12f)
+                }
+            }
+        }
+        TabAskLink("问 AI 资金流向", onAsk)
+    }
+}
+
+internal fun ViewContainer<*, *>.renderSectorPane(
+    instrument: Instrument,
+    onOpen: (Instrument) -> Unit,
+    onAsk: (String) -> Unit,
+) {
+    TabBlock {
+        TabHeading("所属板块")
+        Text {
+            attr {
+                text(instrument.sector.ifBlank { "暂无板块分类" })
+                fontSize(16f)
+                fontWeight600()
+                color(AppTheme.textPrimary)
+                marginTop(10f)
+            }
+        }
+        Text {
+            attr {
+                text("同业来自内置目录，点击可打开对方详情；报价以详情页实时行情为准。")
+                fontSize(12f)
+                lineHeight(18f)
+                color(AppTheme.textTertiary)
+                marginTop(6f)
+            }
+        }
+    }
+    val peers = PeerUniverse.peersOf(instrument, 6)
+    if (peers.isEmpty()) {
+        DetailEmptyHint(if (instrument.isIndex) "指数没有同业个股列表。" else "目录中暂无同市场同业标的。")
+    } else {
+        peers.forEachIndexed { index, peer ->
+            View {
+                attr {
+                    height(56f)
+                    flexDirectionRow()
+                    alignItemsCenter()
+                    if (index < peers.lastIndex) {
+                        borderBottom(Border(0.5f, BorderStyle.SOLID, AppTheme.divider))
+                    }
+                }
+                event { click { onOpen(peer) } }
+                InstrumentAvatar(peer, 36f)
+                View {
+                    attr { flex(1f); marginLeft(10f) }
+                    Text {
+                        attr {
+                            text(peer.name)
+                            fontSize(15f)
+                            fontWeight600()
+                            color(AppTheme.textPrimary)
+                        }
+                    }
+                    Text {
+                        attr {
+                            text("${peer.displayCode}  ·  ${peer.sector.ifBlank { "—" }}")
+                            fontSize(11f)
+                            color(AppTheme.textTertiary)
+                            marginTop(2f)
+                        }
+                    }
+                }
+                Icon(IconKind.CHEVRON_RIGHT, 16f, AppTheme.textTertiary)
+            }
+        }
+    }
+    TabAskLink(
+        "问 AI 板块对比",
+        {
+            onAsk(
+                if (instrument.isIndex) "${instrument.name}成分股表现如何？"
+                else "${instrument.name}和同行业对比如何？",
+            )
+        },
+    )
+}
+
+private fun ViewContainer<*, *>.TabBlock(showDivider: Boolean = true, content: DivView.() -> Unit) {
+    View {
+        attr {
+            paddingTop(14f)
+            paddingBottom(14f)
+        }
+        content()
+    }
+    if (showDivider) {
+        View { attr { height(0.5f); backgroundColor(AppTheme.divider) } }
+    }
+}
+
+private fun ViewContainer<*, *>.TabHeading(title: String, color: Color = AppTheme.textPrimary) {
+    Text {
+        attr {
+            text(title)
+            fontSize(16f)
+            fontWeight600()
+            color(color)
+        }
+    }
+}
+
+private fun ViewContainer<*, *>.TabAskLink(text: String, onClick: () -> Unit) {
+    View {
+        attr {
+            flexDirectionRow()
+            alignItemsCenter()
+            height(36f)
+            marginTop(12f)
+        }
+        event { click { onClick() } }
+        Text {
+            attr {
+                text(text)
+                fontSize(14f)
+                fontWeight600()
+                color(AppTheme.textPrimary)
+            }
+        }
+        Icon(IconKind.CHEVRON_RIGHT, 14f, AppTheme.textTertiary)
+    }
+}
+
+private fun ViewContainer<*, *>.DetailEmptyHint(text: String) {
+    View {
+        attr {
+            paddingTop(20f)
+            paddingBottom(12f)
+            alignItemsCenter()
+        }
+        Text {
+            attr {
+                text(text)
+                fontSize(13f)
+                color(AppTheme.textTertiary)
             }
         }
     }
@@ -201,8 +414,8 @@ fun ViewContainer<*, *>.MetricsCard(quote: Quote, analysis: TechnicalAnalysis?) 
         quote.low52w?.let { add(Metric("52周低", NumberFormat.price(it))) }
         analysis?.volatilityPct?.let { add(Metric("20日波动", NumberFormat.pct(it))) }
     }
-    Card {
-        SectionTitle("关键指标", IconKind.CHART)
+    TabBlock {
+        TabHeading("关键指标")
         metrics.chunked(3).forEach { row ->
             View {
                 attr { flexDirectionRow(); marginTop(10f) }
@@ -229,8 +442,8 @@ fun ViewContainer<*, *>.MetricsCard(quote: Quote, analysis: TechnicalAnalysis?) 
 
 /** 估值区分为“已知数据”和“暂无数据”，比空白字段更适合演示与真实 API 切换。 */
 fun ViewContainer<*, *>.ValuationCard(quote: Quote) {
-    Card {
-        SectionTitle("估值与规模", IconKind.BOOK)
+    TabBlock {
+        TabHeading("估值与规模")
         View {
             attr { flexDirectionRow(); marginTop(12f) }
             ValuationCell("市盈率", NumberFormat.ratio(quote.pe), quote.pe?.let { if (it <= 20) AppTheme.up else AppTheme.warning })
@@ -264,20 +477,11 @@ fun ViewContainer<*, *>.AiInsightCard(
     instrument: Instrument,
     onAsk: (String) -> Unit,
 ) {
-    Card {
+    TabBlock {
         View {
             attr { flexDirectionRow(); alignItemsCenter() }
-            BrandMark(22f)
-            Text {
-                attr {
-                    text("技术解读")
-                    fontSize(15f)
-                    fontWeight700()
-                    color(AppTheme.textPrimary)
-                    marginLeft(8f)
-                    flex(1f)
-                }
-            }
+            TabHeading("AI 分析与解读")
+            View { attr { flex(1f) } }
             ScoreBadge(analysis.score)
         }
         Text {
@@ -309,21 +513,8 @@ fun ViewContainer<*, *>.AiInsightCard(
 }
 
 fun ViewContainer<*, *>.PredictionCard(vm: StockDetailViewModel) {
-    Card {
-        View {
-            attr { flexDirectionRow(); alignItemsCenter() }
-            Icon(IconKind.SPARKLE, 16f, AppTheme.accent)
-            Text {
-                attr {
-                    text("AI 情景预测")
-                    fontSize(15f)
-                    fontWeight700()
-                    color(AppTheme.textPrimary)
-                    marginLeft(8f)
-                    flex(1f)
-                }
-            }
-        }
+    TabBlock {
+        TabHeading("AI 情景预测")
         Text {
             attr {
                 text("仅在模型请求成功并通过校验后展示，不绘制本地伪造曲线。演示信息，不构成投资建议。")
@@ -389,12 +580,8 @@ fun ViewContainer<*, *>.PredictionCard(vm: StockDetailViewModel) {
                             val selected = vm.selectedBar?.date == point.date && vm.selectedBar?.isForecast == true
                             View {
                                 attr {
-                                    paddingLeft(8f); paddingRight(8f); paddingTop(6f); paddingBottom(6f)
-                                    backgroundColor(if (selected) AppTheme.accentSoft else AppTheme.surfaceMuted)
-                                    borderRadius(8f)
-                                    marginRight(6f)
-                                    marginTop(6f)
-                                    if (selected) border(Border(1f, BorderStyle.SOLID, AppTheme.accent))
+                                    marginRight(12f)
+                                    marginTop(8f)
                                 }
                                 event {
                                     click {
@@ -408,8 +595,9 @@ fun ViewContainer<*, *>.PredictionCard(vm: StockDetailViewModel) {
                                 Text {
                                     attr {
                                         text("${point.date.takeLast(5)}  ${NumberFormat.price(point.price)}")
-                                        fontSize(11f)
-                                        color(if (selected) AppTheme.accent else AppTheme.textPrimary)
+                                        fontSize(13f)
+                                        fontWeight600()
+                                        color(if (selected) AppTheme.textPrimary else AppTheme.textTertiary)
                                     }
                                 }
                             }
@@ -433,14 +621,9 @@ private fun ViewContainer<*, *>.ScoreBadge(score: Int) {
         else -> "中性"
     }
     View {
-        attr {
-            flexDirectionRow(); alignItemsCenter()
-            paddingLeft(8f); paddingRight(8f); paddingTop(3f); paddingBottom(3f)
-            borderRadius(10f)
-            backgroundColor(AppTheme.changeSoftColor(if (score >= 65) 1.0 else if (score <= 38) -1.0 else 0.0))
-        }
-        Text { attr { text("技术评分 $score"); fontSize(11f); fontWeight600(); color(color) } }
-        Text { attr { text(" · $label"); fontSize(11f); color(color) } }
+        attr { flexDirectionRow(); alignItemsCenter() }
+        Text { attr { text("技术评分 $score"); fontSize(12f); fontWeight600(); color(color) } }
+        Text { attr { text(" · $label"); fontSize(12f); color(color) } }
     }
 }
 
@@ -448,7 +631,7 @@ private fun ViewContainer<*, *>.ScoreBadge(score: Int) {
 
 // region 技术面
 
-fun ViewContainer<*, *>.TechnicalCard(quote: Quote, analysis: TechnicalAnalysis) {
+fun ViewContainer<*, *>.TechnicalCard(quote: Quote, analysis: TechnicalAnalysis, period: KLinePeriod? = null) {
     val rsi = analysis.rsi14
     val rsiLabel = when {
         rsi == null -> "--"
@@ -462,8 +645,21 @@ fun ViewContainer<*, *>.TechnicalCard(quote: Quote, analysis: TechnicalAnalysis)
         rsi <= 30 -> AppTheme.up
         else -> AppTheme.textPrimary
     }
-    Card {
-        SectionTitle("技术面", IconKind.TREND_UP)
+    TabBlock {
+        TabHeading("技术面")
+        period?.let { current ->
+            Text {
+                attr {
+                    text(
+                        if (current == KLinePeriod.MINUTE) "分时 · 分钟 K，有 iTick 走分钟线，否则回退腾讯"
+                        else "${current.label} · 双指缩放，已叠加 MA5 / MA10 / MA20",
+                    )
+                    fontSize(11f)
+                    color(AppTheme.textTertiary)
+                    marginTop(6f)
+                }
+            }
+        }
         View {
             attr { flexDirectionRow(); marginTop(12f) }
             listOf("MA5" to analysis.ma5, "MA10" to analysis.ma10, "MA20" to analysis.ma20, "MA60" to analysis.ma60).forEach { (label, value) ->
@@ -581,8 +777,8 @@ private fun ViewContainer<*, *>.SupportResistanceBar(price: Double, support: Dou
 
 fun ViewContainer<*, *>.RiskCard(risks: List<String>) {
     if (risks.isEmpty()) return
-    Card {
-        SectionTitle("风险提示", IconKind.ALERT, AppTheme.warning)
+    TabBlock {
+        TabHeading("风险提示", AppTheme.warning)
         risks.forEach { risk ->
             View {
                 attr { flexDirectionRow(); alignItemsFlexStart(); marginTop(10f) }
@@ -615,18 +811,11 @@ fun ViewContainer<*, *>.RiskCard(risks: List<String>) {
 fun ViewContainer<*, *>.ChartFollowUpBar(vm: StockDetailViewModel, onAsk: () -> Unit) {
     val points = vm.stripPoints()
     if (points.isEmpty()) return
-    Card {
+    TabBlock {
+        TabHeading("点位条")
         Text {
             attr {
-                text("点位条")
-                fontSize(13f)
-                fontWeight700()
-                color(AppTheme.textPrimary)
-            }
-        }
-        Text {
-            attr {
-                text("点选历史 K 或情景预测日，再带回对话追问。KuiklyKLineChart 无选中回调时用此条代替。")
+                text("点选历史 K 或情景预测日，或点图上 K 线，再带回对话追问。")
                 fontSize(11f)
                 color(AppTheme.textTertiary)
                 marginTop(6f)
@@ -638,19 +827,16 @@ fun ViewContainer<*, *>.ChartFollowUpBar(vm: StockDetailViewModel, onAsk: () -> 
                 val selected = vm.selectedBar?.date == point.date && vm.selectedBar?.isForecast == point.isForecast
                 View {
                     attr {
-                        paddingLeft(8f); paddingRight(8f); paddingTop(6f); paddingBottom(6f)
-                        backgroundColor(if (selected) AppTheme.accentSoft else AppTheme.surfaceMuted)
-                        borderRadius(8f)
-                        marginRight(6f)
-                        marginTop(6f)
-                        if (selected) border(Border(1f, BorderStyle.SOLID, AppTheme.accent))
+                        marginRight(14f)
+                        marginTop(8f)
                     }
                     event { click { vm.selectPoint(point) } }
                     Text {
                         attr {
                             text("${point.date.takeLast(5)}${if (point.isForecast) " 预" else ""}")
-                            fontSize(11f)
-                            color(if (selected) AppTheme.accent else AppTheme.textPrimary)
+                            fontSize(13f)
+                            fontWeight600()
+                            color(if (selected) AppTheme.textPrimary else AppTheme.textTertiary)
                         }
                     }
                 }
@@ -675,13 +861,7 @@ fun ViewContainer<*, *>.ChartFollowUpBar(vm: StockDetailViewModel, onAsk: () -> 
                     marginTop(10f)
                 }
             }
-            View { attr { marginTop(10f) } }
-            PillButton(
-                "把这一点带回对话",
-                background = AppTheme.primaryLight,
-                textColor = AppTheme.primary,
-                borderColor = AppTheme.primarySoft,
-            ) { onAsk() }
+            TabAskLink("把这一点带回对话", onAsk)
         }
     }
 }
@@ -700,8 +880,21 @@ private fun ViewContainer<*, *>.QuickAskPills(instrument: Instrument, onAsk: (St
         attr { flexDirectionRow(); flexWrapWrap(); marginTop(8f) }
         items.forEach { (label, prompt) ->
             View {
-                attr { marginRight(8f); marginBottom(8f) }
-                PillButton(label) { onAsk(prompt) }
+                attr {
+                    height(32f)
+                    justifyContentCenter()
+                    marginRight(16f)
+                    marginBottom(4f)
+                }
+                event { click { onAsk(prompt) } }
+                Text {
+                    attr {
+                        text(label)
+                        fontSize(13f)
+                        fontWeight600()
+                        color(AppTheme.textPrimary)
+                    }
+                }
             }
         }
     }
@@ -709,21 +902,3 @@ private fun ViewContainer<*, *>.QuickAskPills(instrument: Instrument, onAsk: (St
 
 // endregion
 
-internal fun ViewContainer<*, *>.SectionTitle(title: String, icon: IconKind, color: Color = AppTheme.textPrimary) {
-    View {
-        attr { flexDirectionRow(); alignItemsCenter() }
-        View {
-            attr { size(24f, 24f); borderRadius(6f); backgroundColor(AppTheme.surfaceMuted); allCenter() }
-            Icon(icon, 14f, color)
-        }
-        Text {
-            attr {
-                text(title)
-                fontSize(15f)
-                fontWeight700()
-                color(AppTheme.textPrimary)
-                marginLeft(8f)
-            }
-        }
-    }
-}

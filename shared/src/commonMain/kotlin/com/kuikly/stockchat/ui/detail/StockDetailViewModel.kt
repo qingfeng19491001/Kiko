@@ -2,10 +2,13 @@ package com.kuikly.stockchat.ui.detail
 
 import com.kuikly.stockchat.data.ai.StockPredictionService
 import com.kuikly.stockchat.data.chat.WatchlistRepository
+import com.kuikly.stockchat.data.kline.MarketKLineDataSource
+import com.kuikly.stockchat.data.market.DerivedMarketRepository
 import com.kuikly.stockchat.data.market.MarketRepository
 import com.kuikly.stockchat.domain.analysis.AnalysisEngine
 import com.kuikly.stockchat.domain.analysis.TechnicalAnalysis
 import com.kuikly.stockchat.domain.chat.AnswerComposer
+import com.kuikly.stockchat.domain.model.CapitalFlowData
 import com.kuikly.stockchat.domain.model.Instrument
 import com.kuikly.stockchat.domain.model.IntradaySeries
 import com.kuikly.stockchat.domain.model.KLineBar
@@ -27,6 +30,7 @@ class StockDetailViewModel(
     private val marketRepository: MarketRepository,
     private val watchlistRepository: WatchlistRepository,
     private val predictionService: StockPredictionService? = null,
+    private val derivedRepository: DerivedMarketRepository? = null,
 ) {
     enum class LoadState { LOADING, READY, ERROR }
     enum class PredictionState { IDLE, LOADING, READY, UNAVAILABLE, FAILED }
@@ -50,9 +54,15 @@ class StockDetailViewModel(
     var prediction: StockPrediction? by observable<StockPrediction?>(null)
     var predictionMessage by observable("")
     var selectedBar by observable<SelectedChartPoint?>(null)
+    var capitalFlow: CapitalFlowData? by observable<CapitalFlowData?>(null)
+    var capitalFlowLoading by observable(false)
 
     private var snapshot: MarketSnapshot? = null
     private val barsCache = mutableMapOf<KLinePeriod, List<KLineBar>>()
+    private var loadGeneration = 0
+    private var chartGeneration = 0
+    private var predictionGeneration = 0
+    private var capitalFlowGeneration = 0
 
     val dailyBars: List<KLineBar> get() = snapshot?.dailyBars ?: emptyList()
 
@@ -88,10 +98,28 @@ class StockDetailViewModel(
         selectedBar = point
     }
 
+    fun selectBarAtIndex(index: Int) {
+        val history = currentHistory()
+        val all = history + forecastBars
+        val bar = all.getOrNull(index) ?: return
+        val prev = all.getOrNull(index - 1)?.close
+        selectedBar = SelectedChartPoint.fromBar(bar, prev, isForecast = index >= history.size)
+    }
+
+    fun selectBarAtTimestamp(timestamp: Long) {
+        val history = currentHistory()
+        val all = history + forecastBars
+        val index = all.indexOfFirst { DateUtil.parseToEpochMillis(it.date) == timestamp }
+        if (index >= 0) selectBarAtIndex(index)
+    }
+
     fun load() {
+        cancelPendingRequests()
+        val generation = loadGeneration
         loadState = LoadState.LOADING
         isWatching = watchlistRepository.contains(instrument.key)
         marketRepository.loadSnapshot(instrument) { snap ->
+            if (generation != loadGeneration) return@loadSnapshot
             snapshot = snap
             quote = snap.quote
             isMock = snap.quote.isMock
@@ -104,7 +132,29 @@ class StockDetailViewModel(
             loadState = LoadState.READY
             refreshChart()
             ensureDefaultSelection()
-            requestPrediction(snap)
+            loadCapitalFlow()
+            if (snap.dailyBars.isEmpty()) {
+                marketRepository.loadBarsOrMock(instrument, KLinePeriod.DAY, 320) { bars, mock ->
+                    if (generation != loadGeneration) return@loadBarsOrMock
+                    if (bars.isEmpty()) {
+                        requestPrediction(snap)
+                        return@loadBarsOrMock
+                    }
+                    barsCache[KLinePeriod.DAY] = bars
+                    isMock = mock
+                    val filled = snap.copy(dailyBars = bars)
+                    snapshot = filled
+                    val result = AnalysisEngine.analyze(filled)
+                    analysis = result
+                    insight = AnswerComposer.detailInsight(filled, result)
+                    risks = AnswerComposer.riskItems(filled, result)
+                    refreshChart()
+                    ensureDefaultSelection()
+                    requestPrediction(filled)
+                }
+            } else {
+                requestPrediction(snap)
+            }
         }
     }
 
@@ -116,11 +166,39 @@ class StockDetailViewModel(
         ensureDefaultSelection()
     }
 
+    /**
+     * NetworkModule 不提供传输层取消句柄；通过推进代次让所有在途回调立即失效。
+     * 页面重载、切周期和销毁时调用，避免旧请求更新响应式状态。
+     */
+    fun cancelPendingRequests() {
+        loadGeneration += 1
+        chartGeneration += 1
+        predictionGeneration += 1
+        capitalFlowGeneration += 1
+    }
+
     fun toggleWatch() {
         isWatching = watchlistRepository.toggle(instrument.key)
     }
 
+    private fun loadCapitalFlow() {
+        val generation = ++capitalFlowGeneration
+        val repo = derivedRepository
+        if (repo == null) {
+            capitalFlow = null
+            capitalFlowLoading = false
+            return
+        }
+        capitalFlowLoading = true
+        repo.loadCapitalFlow(instrument) { data ->
+            if (generation != capitalFlowGeneration) return@loadCapitalFlow
+            capitalFlow = data
+            capitalFlowLoading = false
+        }
+    }
+
     private fun requestPrediction(snap: MarketSnapshot) {
+        val generation = ++predictionGeneration
         val service = predictionService
         if (service == null) {
             predictionState = PredictionState.UNAVAILABLE
@@ -131,6 +209,7 @@ class StockDetailViewModel(
         prediction = null
         predictionMessage = ""
         service.predict(instrument, snap.quote, snap.dailyBars) { result ->
+            if (generation != predictionGeneration) return@predict
             when (result) {
                 is PredictionResult.Success -> {
                     prediction = result.prediction
@@ -153,41 +232,53 @@ class StockDetailViewModel(
     }
 
     private fun refreshChart() {
+        val generation = ++chartGeneration
         val p = period
         if (p.isIntraday) {
             val q = quote ?: return
             if (intraday != null) {
-                barsJson = encodeIntradayBars(intraday ?: return)
+                barsJson = encodeIntraday(intraday ?: return)
                 chartLoading = false
                 return
             }
             barsJson = ""
             chartLoading = true
             marketRepository.loadIntraday(instrument, q) { series, _ ->
-                if (period == KLinePeriod.MINUTE) {
+                if (generation == chartGeneration && period == KLinePeriod.MINUTE) {
                     intraday = series
-                    barsJson = encodeIntradayBars(series)
+                    barsJson = encodeIntraday(series)
                     chartLoading = false
                 }
             }
             return
         }
         barsCache[p]?.let {
-            barsJson = encodeBars(it + forecastOverlay(p))
+            barsJson = MarketKLineDataSource.barsJson(it + forecastOverlay(p))
             chartLoading = false
             return
         }
         barsJson = ""
         chartLoading = true
-        val count = if (p == KLinePeriod.FIVE_DAY) 240 else 160
+        val count = when {
+            p == KLinePeriod.FIVE_DAY -> 8
+            p.isMinuteBar -> 320
+            p == KLinePeriod.YEAR || p == KLinePeriod.QUARTER -> 200
+            else -> 160
+        }
         marketRepository.loadBarsOrMock(instrument, p, count) { bars, _ ->
+            if (generation != chartGeneration) return@loadBarsOrMock
             barsCache[p] = bars
             if (period == p) {
-                barsJson = encodeBars(bars + forecastOverlay(p))
+                barsJson = MarketKLineDataSource.barsJson(bars + forecastOverlay(p))
                 chartLoading = false
                 ensureDefaultSelection()
             }
         }
+    }
+
+    private fun encodeIntraday(series: IntradaySeries): String {
+        val yearHint = snapshot?.dailyBars?.lastOrNull()?.date?.take(4) ?: "2026"
+        return MarketKLineDataSource.intradayBarsJson(series, yearHint)
     }
 
     private fun forecastOverlay(p: KLinePeriod): List<KLineBar> {
@@ -200,64 +291,9 @@ class StockDetailViewModel(
         stripPoints().lastOrNull { !it.isForecast }?.let { selectedBar = it }
     }
 
-    /** 转成 KuiklyKLineChart 需要的 JSON 数组 */
-    private fun encodeBars(bars: List<KLineBar>): String {
-        val sb = StringBuilder("[")
-        var first = true
-        bars.forEach { bar ->
-            val ts = DateUtil.parseToEpochMillis(bar.date) ?: return@forEach
-            if (!first) sb.append(',')
-            first = false
-            sb.append("{\"timestamp\":").append(ts)
-                .append(",\"open\":").append(bar.open)
-                .append(",\"high\":").append(bar.high)
-                .append(",\"low\":").append(bar.low)
-                .append(",\"close\":").append(bar.close)
-                .append(",\"volume\":").append(bar.volume)
-                .append('}')
-        }
-        sb.append(']')
-        return sb.toString()
+    private fun currentHistory(): List<KLineBar> = when {
+        period == KLinePeriod.DAY -> barsCache[KLinePeriod.DAY] ?: dailyBars
+        else -> barsCache[period].orEmpty()
     }
 
-    /**
-     * 分时序列 → KLineChart bars。与官方 Demo 一致：分时也用 KLineChart line 模式渲染，
-     * 每个 tick 转成一根 open=high=low=close 的分钟 bar。
-     * 成交量口径兼容：mock 是累计量，单调不减时转成每根差分，避免成交量副图单边递增。
-     */
-    private fun encodeIntradayBars(series: IntradaySeries): String {
-        val ticks = series.ticks
-        if (ticks.isEmpty()) return ""
-        val digits = series.date.filter { it.isDigit() }
-        val year = snapshot?.dailyBars?.lastOrNull()?.date?.take(4) ?: "2026"
-        val ymd = when {
-            series.date.length >= 10 && series.date[4] == '-' -> series.date.substring(0, 10)
-            digits.length == 8 ->
-                "${digits.substring(0, 4)}-${digits.substring(4, 6)}-${digits.substring(6, 8)}"
-            digits.length == 4 -> "$year-${digits.substring(0, 2)}-${digits.substring(2, 4)}"
-            else -> return ""
-        }
-        val isCumulative = ticks.size > 2 &&
-            ticks.last().volume >= ticks.first().volume &&
-            ticks.zipWithNext().all { (a, b) -> b.volume >= a.volume }
-        val sb = StringBuilder("[")
-        var first = true
-        var prevVolume = 0.0
-        ticks.forEach { tick ->
-            val ts = DateUtil.parseToEpochMillis("$ymd ${tick.time}") ?: return@forEach
-            val volume = if (isCumulative) (tick.volume - prevVolume).coerceAtLeast(0.0) else tick.volume
-            prevVolume = tick.volume
-            if (!first) sb.append(',')
-            first = false
-            sb.append("{\"timestamp\":").append(ts)
-                .append(",\"open\":").append(tick.price)
-                .append(",\"high\":").append(tick.price)
-                .append(",\"low\":").append(tick.price)
-                .append(",\"close\":").append(tick.price)
-                .append(",\"volume\":").append(volume)
-                .append('}')
-        }
-        sb.append(']')
-        return sb.toString()
-    }
 }
