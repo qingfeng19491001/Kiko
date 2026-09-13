@@ -13,7 +13,8 @@ import com.tencent.kuikly.core.nvi.serialization.json.JSONObject
 /**
  * 腾讯证券公开行情接口解析器。
  *
- * - 实时行情：`https://qt.gtimg.cn/q=hk00700` → `v_hk00700="100~腾讯控股~00700~price~...";`
+ * - 实时行情：`https://web.sqt.gtimg.cn/utf8/q=hk00700` → `v_hk00700="100~腾讯控股~00700~price~...";`
+ *   不用 `qt.gtimg.cn`：该域回 GBK，iOS NetworkModule 按 UTF-8 解码会得到空串，列表报价全是 `--`。
  * - K 线：`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=hk00700,day,,,320,qfq`
  * - 分时：`https://web.ifzq.gtimg.cn/appstock/app/minute/query?code=hk00700`
  *
@@ -21,13 +22,13 @@ import com.tencent.kuikly.core.nvi.serialization.json.JSONObject
  */
 object TencentMarketParser {
 
-    const val QUOTE_BASE = "https://qt.gtimg.cn/q="
+    const val QUOTE_BASE = "https://web.sqt.gtimg.cn/utf8/q="
     const val KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
     const val MKLINE_URL = "https://ifzq.gtimg.cn/appstock/app/kline/mkline"
     const val MINUTE_URL = "https://web.ifzq.gtimg.cn/appstock/app/minute/query"
 
     fun quoteUrl(instruments: List<Instrument>): String =
-        QUOTE_BASE + instruments.flatMap { quoteRequestKeys(it) }.distinct().joinToString(",")
+        QUOTE_BASE + instruments.map { quoteRequestKeys(it).first() }.distinct().joinToString(",")
 
     /**
      * 实际请求键不能带交易所后缀：`usAAPL.OQ` 会回 `v_pv_none_match`，

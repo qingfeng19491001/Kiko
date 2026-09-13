@@ -30,7 +30,7 @@ class TencentQuoteParserTest {
     @Test
     fun quoteUrlBatchesMultipleSymbols() {
         val url = TencentMarketParser.quoteUrl(listOf(StockCatalog.tencent, StockCatalog.moutai, StockCatalog.apple))
-        assertTrue(url.startsWith("https://qt.gtimg.cn/q="))
+        assertTrue(url.startsWith("https://web.sqt.gtimg.cn/utf8/q="))
         assertTrue(url.contains("hk00700"))
         assertTrue(url.contains("sh600519"))
         assertTrue(url.contains("usAAPL") || url.contains("AAPL"))
