@@ -33,6 +33,11 @@ internal class StockDetailPage : Pager(), StockDetailScreenHost {
     internal var instrumentMissing by observable(false)
     internal var selectedTab by observable(DetailTab.DIAGNOSIS)
     internal var selectedSubTab by observable(DetailTab.DIAGNOSIS.subTabs.first())
+    internal var landedFromChat by observable(false)
+    internal var landedChatSummary by observable("")
+
+    override val fromChat get() = landedFromChat
+    override val chatSummary get() = landedChatSummary
 
     override val viewModel get() = vm
     override val detailInstrument get() = instrument
@@ -87,7 +92,16 @@ internal class StockDetailPage : Pager(), StockDetailScreenHost {
         instrumentMissing = resolved == null
         instrument = resolved ?: Instrument(code = "----", name = "未知标的", market = com.kuikly.stockchat.domain.model.Market.SH)
         InstrumentCache.put(instrument)
+        landedFromChat = pageData.params.optString("from") == "chat"
+        landedChatSummary = pageData.params.optString("chatSummary")
+        if (landedFromChat) {
+            selectedTab = DetailTab.DIAGNOSIS
+            selectedSubTab = "全部"
+        }
         vm = createStockDetailViewModel(this, instrument)
+        if (landedFromChat) {
+            vm.period = com.kuikly.stockchat.domain.model.KLinePeriod.DAY
+        }
         if (instrumentMissing) {
             vm.loadState = StockDetailViewModel.LoadState.ERROR
         } else {
@@ -102,6 +116,7 @@ internal class StockDetailPage : Pager(), StockDetailScreenHost {
 
     override fun body(): ViewBuilder = StockDetailScreen(
         host = this,
+        pageHeight = pagerData.pageViewHeight,
         statusBarHeight = pagerData.statusBarHeight,
         bottomInset = pagerData.safeAreaInsets.bottom,
     )

@@ -31,16 +31,22 @@ internal interface StockDetailScreenHost : KLineWorkspaceHost {
     fun onAskAi(prompt: String)
     fun onAskSelection()
     fun onOpenInstrument(instrument: Instrument)
+    val fromChat: Boolean
+    val chatSummary: String
 }
 
 internal fun StockDetailScreen(
     host: StockDetailScreenHost,
+    pageHeight: Float,
     statusBarHeight: Float,
     bottomInset: Float,
 ): ViewBuilder {
-    val chartHeight = 420f
+    val chartHeight = detailWorkspaceHeight(pageHeight, statusBarHeight, bottomInset)
     return {
-        attr { backgroundColor(AppTheme.background) }
+        attr {
+            flex(1f)
+            backgroundColor(AppTheme.background)
+        }
         DetailNavBar(host, statusBarHeight)
         vif({ host.viewModel.loadState == StockDetailViewModel.LoadState.LOADING }) {
             DetailLoading(host.detailInstrument)
@@ -54,6 +60,7 @@ internal fun StockDetailScreen(
                 View {
                     attr { backgroundColor(AppTheme.surface) }
                     vif({ host.viewModel.isMock }) { OfflineMarketBanner() }
+                    vif({ host.fromChat }) { ChatLandingBanner(host) }
                     vbind({ host.viewModel.quote }) {
                         host.viewModel.quote?.let { DemoQuoteOverview(it) }
                     }
@@ -185,6 +192,44 @@ private fun ViewContainer<*, *>.DetailError(host: StockDetailScreenHost) {
     }
 }
 
+private fun ViewContainer<*, *>.ChatLandingBanner(host: StockDetailScreenHost) {
+    View {
+        attr {
+            backgroundColor(AppTheme.accentSoft)
+            borderRadius(10f)
+            paddingLeft(12f)
+            paddingRight(12f)
+            paddingTop(10f)
+            paddingBottom(10f)
+            marginLeft(AppTheme.pageHorizontalPadding)
+            marginRight(AppTheme.pageHorizontalPadding)
+            marginTop(10f)
+            marginBottom(2f)
+        }
+        Text {
+            attr {
+                text("来自 AI 问答 · ${host.detailInstrument.name}")
+                fontSize(12f)
+                fontWeight600()
+                color(AppTheme.accent)
+            }
+        }
+        Text {
+            attr {
+                text(
+                    host.chatSummary.ifBlank {
+                        "上方为实时行情与走势，下滑诊股可看摘要、点位与风险。"
+                    },
+                )
+                fontSize(12f)
+                lineHeight(18f)
+                color(AppTheme.textSecondary)
+                marginTop(4f)
+            }
+        }
+    }
+}
+
 private fun ViewContainer<*, *>.OfflineMarketBanner() {
     View {
         attr {
@@ -213,6 +258,27 @@ private fun ViewContainer<*, *>.OfflineMarketBanner() {
     }
 }
 
+/**
+ * K 线吃掉 List 视口里报价 / 周期 / 诊股 Tab / 底栏安全区之后的剩余高度。
+ * 不设 420 上限：高机图更高，解读仍按内容排在 Tab 下方，靠整页 List 滚动。
+ */
+internal fun detailWorkspaceHeight(
+    pageHeight: Float,
+    statusBarHeight: Float,
+    bottomInset: Float,
+): Float {
+    val listViewport = pageHeight - statusBarHeight - AppTheme.navBarHeight
+    val chromeInList = DETAIL_QUOTE_HEIGHT + DETAIL_PERIOD_HEIGHT + DETAIL_TAB_BAR_HEIGHT + bottomInset
+    val leftover = listViewport - chromeInList
+    if (leftover <= 0f) return DETAIL_CHART_MIN
+    return leftover.coerceAtLeast(DETAIL_CHART_MIN)
+}
+
+private const val DETAIL_QUOTE_HEIGHT = 104f
+private const val DETAIL_PERIOD_HEIGHT = 34f
+private const val DETAIL_TAB_BAR_HEIGHT = 80.5f
+private const val DETAIL_CHART_MIN = 200f
+
 private fun ViewContainer<*, *>.DetailBodySection(host: StockDetailScreenHost) {
     vbind({
         listOf(
@@ -228,6 +294,9 @@ private fun ViewContainer<*, *>.DetailBodySection(host: StockDetailScreenHost) {
             host.viewModel.capitalFlow?.date,
             host.viewModel.capitalFlowLoading,
             host.viewModel.quote?.updateTime,
+            host.viewModel.insight,
+            host.fromChat,
+            host.chatSummary,
         ).joinToString("|")
     }) {
         val quote = host.viewModel.quote
@@ -239,6 +308,8 @@ private fun ViewContainer<*, *>.DetailBodySection(host: StockDetailScreenHost) {
                 subTab = host.selectedDetailSubTab,
                 onAsk = host::onAskAi,
                 onAskSelection = host::onAskSelection,
+                fromChat = host.fromChat,
+                chatSummary = host.chatSummary,
             )
             DetailTab.PROFILE -> if (quote != null) ProfilePane(quote, analysis, host.selectedDetailSubTab)
             DetailTab.TECH -> if (quote != null && analysis != null) TechPane(quote, analysis, host.viewModel.period)

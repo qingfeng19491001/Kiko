@@ -1,5 +1,6 @@
 package com.kuikly.stockchat.ui.detail
 
+import com.kuikly.stockchat.domain.analysis.DetailActionPlan
 import com.kuikly.stockchat.domain.analysis.TechnicalAnalysis
 import com.kuikly.stockchat.domain.analysis.TrendBias
 import com.kuikly.stockchat.domain.model.CapitalFlowData
@@ -31,7 +32,7 @@ import com.tencent.kuikly.core.views.View
  * 一级：诊股 / 简况 / 技术 / 资金 / 板块；二级随一级切换，避免长页堆叠。
  */
 internal enum class DetailTab(val label: String, val subTabs: List<String>) {
-    DIAGNOSIS("诊股", listOf("全部", "解读", "预测", "追问", "风险")),
+    DIAGNOSIS("诊股", listOf("全部", "解读", "点位", "预测", "追问", "风险")),
     PROFILE("简况", listOf("全部", "指标", "估值")),
     TECH("技术", emptyList()),
     FLOW("资金", emptyList()),
@@ -135,13 +136,25 @@ internal fun ViewContainer<*, *>.renderDiagnosisPane(
     subTab: String,
     onAsk: (String) -> Unit,
     onAskSelection: () -> Unit,
+    fromChat: Boolean = false,
+    chatSummary: String = "",
 ) {
     val showAll = subTab == "全部"
+    val analysis = vm.analysis
+    val quote = vm.quote
+    val plan = if (quote != null && analysis != null) DetailActionPlan.from(quote, analysis) else null
+    if (fromChat && (showAll || subTab == "解读")) {
+        ChatHandoffBanner(instrument, chatSummary, onAsk)
+    }
     if (showAll || subTab == "解读") {
-        val analysis = vm.analysis
         if (analysis != null) {
-            AiInsightCard(vm.insight, analysis, instrument, onAsk)
+            AiInsightCard(vm.insight, analysis, instrument, onAsk, plan)
         }
+    }
+    if ((showAll || subTab == "点位") && plan != null && quote != null) {
+        ActionLevelsCard(quote, analysis!!, plan)
+    } else if (subTab == "点位") {
+        DetailEmptyHint("行情加载后将给出关注区与压力区。")
     }
     if (showAll || subTab == "预测") {
         PredictionCard(vm)
@@ -329,11 +342,16 @@ internal fun ViewContainer<*, *>.renderSectorPane(
     )
 }
 
-private fun ViewContainer<*, *>.TabBlock(showDivider: Boolean = true, content: DivView.() -> Unit) {
+private fun ViewContainer<*, *>.TabBlock(
+    showDivider: Boolean = true,
+    minHeight: Float = 0f,
+    content: DivView.() -> Unit,
+) {
     View {
         attr {
             paddingTop(14f)
             paddingBottom(14f)
+            if (minHeight > 0f) minHeight(minHeight)
         }
         content()
     }
@@ -476,14 +494,17 @@ fun ViewContainer<*, *>.AiInsightCard(
     analysis: TechnicalAnalysis,
     instrument: Instrument,
     onAsk: (String) -> Unit,
+    plan: DetailActionPlan? = null,
+    minHeight: Float = 0f,
 ) {
-    TabBlock {
+    TabBlock(minHeight = minHeight) {
         View {
             attr { flexDirectionRow(); alignItemsCenter() }
             TabHeading("AI 分析与解读")
             View { attr { flex(1f) } }
             ScoreBadge(analysis.score)
         }
+        plan?.let { ActionStanceRow(it) }
         Text {
             attr {
                 text(insight)
@@ -499,6 +520,7 @@ fun ViewContainer<*, *>.AiInsightCard(
                 analysis.tags.forEach { TagChip(it) }
             }
         }
+        plan?.let { SignalBoard(it) }
         Text {
             attr {
                 text("继续问")
@@ -509,6 +531,155 @@ fun ViewContainer<*, *>.AiInsightCard(
             }
         }
         QuickAskPills(instrument, onAsk)
+    }
+}
+
+private fun ViewContainer<*, *>.ChatHandoffBanner(
+    instrument: Instrument,
+    summary: String,
+    onAsk: (String) -> Unit,
+) {
+    TabBlock {
+        View {
+            attr { flexDirectionRow(); alignItemsCenter() }
+            TabHeading("对话承接")
+            View { attr { flex(1f) } }
+            Text {
+                attr {
+                    text("来自问答")
+                    fontSize(11f)
+                    fontWeight600()
+                    color(AppTheme.accent)
+                }
+            }
+        }
+        Text {
+            attr {
+                text(
+                    summary.ifBlank {
+                        "从聊天点进 ${instrument.name}。上方是实时行情与走势，下面是本页根据日 K 生成的解读。"
+                    },
+                )
+                fontSize(13f)
+                lineHeight(21f)
+                color(AppTheme.textSecondary)
+                marginTop(10f)
+            }
+        }
+        TabAskLink("继续在对话里问 ${instrument.name}") {
+            onAsk("结合刚才的结论，再解读一下${instrument.name}")
+        }
+    }
+}
+
+private fun ViewContainer<*, *>.ActionStanceRow(plan: DetailActionPlan) {
+    val toneColor = AppTheme.toneColor(plan.stanceTone)
+    View {
+        attr {
+            marginTop(10f)
+            backgroundColor(AppTheme.toneSoftColor(plan.stanceTone))
+            borderRadius(8f)
+            paddingLeft(10f)
+            paddingRight(10f)
+            paddingTop(8f)
+            paddingBottom(8f)
+        }
+        Text {
+            attr {
+                text("操作提示 · ${plan.stance}")
+                fontSize(12f)
+                fontWeight600()
+                color(toneColor)
+            }
+        }
+        Text {
+            attr {
+                text(plan.operationTip)
+                fontSize(13f)
+                lineHeight(20f)
+                color(AppTheme.textSecondary)
+                marginTop(4f)
+            }
+        }
+    }
+}
+
+private fun ViewContainer<*, *>.SignalBoard(plan: DetailActionPlan) {
+    plan.signals.chunked(2).forEach { row ->
+        View {
+            attr { flexDirectionRow(); marginTop(10f) }
+            row.forEach { signal ->
+                View {
+                    attr { flex(1f); marginRight(10f) }
+                    Text { attr { text(signal.title); fontSize(10f); color(AppTheme.textTertiary) } }
+                    Text {
+                        attr {
+                            text(signal.value)
+                            fontSize(14f)
+                            fontWeight600()
+                            color(AppTheme.toneColor(signal.tone))
+                            marginTop(2f)
+                        }
+                    }
+                    Text {
+                        attr {
+                            text(signal.hint)
+                            fontSize(11f)
+                            color(AppTheme.textTertiary)
+                            marginTop(2f)
+                        }
+                    }
+                }
+            }
+            repeat(2 - row.size) { View { attr { flex(1f) } } }
+        }
+    }
+}
+
+private fun ViewContainer<*, *>.ActionLevelsCard(
+    quote: Quote,
+    analysis: TechnicalAnalysis,
+    plan: DetailActionPlan,
+) {
+    TabBlock {
+        TabHeading("关注 / 压力点位")
+        Text {
+            attr {
+                text("由近 20 日高低点推算，仅作观察参考，不是下单指令。")
+                fontSize(11f)
+                color(AppTheme.textTertiary)
+                marginTop(6f)
+            }
+        }
+        View {
+            attr { flexDirectionRow(); marginTop(12f) }
+            plan.levels.forEach { level ->
+                View {
+                    attr { flex(1f); marginRight(8f) }
+                    Text { attr { text(level.label); fontSize(11f); color(AppTheme.toneColor(level.tone)) } }
+                    Text {
+                        attr {
+                            text(level.price)
+                            fontSize(16f)
+                            fontWeight600()
+                            color(AppTheme.textPrimary)
+                            marginTop(3f)
+                        }
+                    }
+                    Text {
+                        attr {
+                            text(level.note)
+                            fontSize(10f)
+                            lineHeight(15f)
+                            color(AppTheme.textTertiary)
+                            marginTop(4f)
+                        }
+                    }
+                }
+            }
+        }
+        View { attr { marginTop(14f) } }
+        SupportResistanceBar(quote.price, analysis.support, analysis.resistance)
     }
 }
 

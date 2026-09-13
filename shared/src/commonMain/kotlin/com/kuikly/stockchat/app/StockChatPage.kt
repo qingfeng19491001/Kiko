@@ -160,6 +160,8 @@ internal class StockChatPage : Pager(), StockChatScreenHost, StockChatRuntime {
             "StockDetail",
             JSONObject().apply {
                 put("instrumentKey", instrumentKey)
+                put("from", "chat")
+                put("chatSummary", vm.handoffSummary(instrumentKey))
                 instrument?.let { put("instrument", InstrumentCodec.encode(it)) }
             },
         )

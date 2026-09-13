@@ -9,5 +9,7 @@ fun ViewContainer<*, *>.DiagnosisPane(
     subTab: String,
     onAsk: (String) -> Unit,
     onAskSelection: () -> Unit,
-) = renderDiagnosisPane(vm, instrument, subTab, onAsk, onAskSelection)
+    fromChat: Boolean = false,
+    chatSummary: String = "",
+) = renderDiagnosisPane(vm, instrument, subTab, onAsk, onAskSelection, fromChat, chatSummary)
 

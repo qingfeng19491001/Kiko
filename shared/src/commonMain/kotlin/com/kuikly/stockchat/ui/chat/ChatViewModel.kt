@@ -379,6 +379,20 @@ class ChatViewModel(
 
     // endregion
 
+    /** 点进详情时带一段本轮结论，避免承接页只有行情没有上下文。 */
+    fun handoffSummary(instrumentKey: String): String {
+        val related = messages.asReversed().firstOrNull { msg ->
+            !msg.isUser && msg.toDomain().blocks.any { instrumentKey in it.instrumentKeys() }
+        }
+        val fallback = messages.asReversed().firstOrNull { !it.isUser && it.status == MessageStatus.DONE }
+        val picked = related ?: fallback ?: return ""
+        val blocks = picked.toDomain().blocks
+        val callout = blocks.filterIsInstance<AnswerBlock.SummaryCallout>().firstOrNull()?.text
+        val markdown = blocks.filterIsInstance<AnswerBlock.Markdown>().firstOrNull()?.text
+        val raw = callout ?: markdown ?: picked.actionText()
+        return raw.replace('\n', ' ').trim().take(140)
+    }
+
     private fun contextInstruments(hint: List<Instrument> = emptyList()): List<Instrument> {
         val fromBlocks = messages.asReversed()
             .flatMap { msg -> msg.toDomain().blocks.flatMap { it.instrumentKeys() } }
