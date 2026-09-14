@@ -1,4 +1,4 @@
-# Kiko · kuikly-stock-chat
+# Kiko
 
 Kiko 是面向股票行情与 AI 问答的跨端应用。业务与界面写在一套 `commonMain` 里，Android / iOS / 鸿蒙共用同一条路径：行情列表 → 个股详情 → AI 问答。
 
