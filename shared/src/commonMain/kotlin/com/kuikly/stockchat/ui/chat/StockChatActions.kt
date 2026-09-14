@@ -65,6 +65,8 @@ internal class StockChatActions(
     private var clickGeneration = 0
     private var voiceStartGeneration = 0
     private var voiceGestureActive = false
+    private var pendingVoiceFinish: VoiceRecordZone? = null
+    private var voiceHintGeneration = 0
 
     fun sendPrompt(text: String) {
         if (text.isBlank()) return
@@ -96,28 +98,6 @@ internal class StockChatActions(
             vm.onDrawerQueryChange("")
         }
         settleDrawer(0f)
-    }
-
-    fun openDrawerSkill(skill: DrawerSkill) {
-        closeDrawer()
-        when (skill) {
-            DrawerSkill.SCHEDULE -> {
-                vm.newConversation()
-                sendPrompt(PromptBank.SCHEDULE_PROMPT)
-            }
-            DrawerSkill.MEMORY -> {
-                vm.newConversation()
-                sendPrompt(PromptBank.memoryPrompt(vm.watchlistNames()))
-            }
-            DrawerSkill.RESEARCH -> {
-                vm.newConversation()
-                sendPrompt(PromptBank.RESEARCH_PROMPT)
-            }
-            DrawerSkill.PLAZA -> {
-                vm.newConversation()
-                sendPrompt(PromptBank.PLAZA_PROMPT)
-            }
-        }
     }
 
     fun settleDrawer(target: Float) {
@@ -164,7 +144,6 @@ internal class StockChatActions(
     fun toggleTts() {
         vm.persistTtsEnabled(!vm.ttsEnabled)
         if (!vm.ttsEnabled) runtime.voiceModule.stopSpeaking()
-        vm.banner = if (vm.ttsEnabled) "语音播报已开启，下一条回复将自动朗读" else "语音播报已关闭"
     }
 
     fun speakMessage(message: ChatUiMessage) {
@@ -176,57 +155,29 @@ internal class StockChatActions(
         runtime.voiceModule.stopSpeaking()
         vm.messages.forEach { it.isSpeaking = false }
         val text = message.actionText()
-        if (text.isBlank()) {
-            vm.banner = "当前回复暂无可朗读内容"
-            return
-        }
+        if (text.isBlank()) return
         message.isSpeaking = true
-        runtime.voiceModule.speak(text) { result ->
-            runtime.after(0) {
-                message.isSpeaking = false
-                if (!result.success) vm.banner = result.message
-            }
+        runtime.voiceModule.speak(text) {
+            runtime.after(0) { message.isSpeaking = false }
         }
     }
 
     fun feedback(message: ChatUiMessage, value: Int) {
         message.feedback = if (message.feedback == value) 0 else value
-        vm.banner = when (message.feedback) {
-            1 -> "感谢反馈，这条回答已标记为有帮助"
-            -1 -> "已收到反馈，我们会继续改进回答"
-            else -> "已取消本次评价"
-        }
     }
 
     fun shareMessage(message: ChatUiMessage) {
         val text = message.actionText()
-        if (text.isBlank()) {
-            vm.banner = "当前回复暂无可分享内容"
-            return
-        }
+        if (text.isBlank()) return
         runtime.shareModule().share(
             title = "Kiko AI 股票解读",
             text = "$text\n\n行情有时效性，不构成投资建议。",
-        ) { result ->
-            runtime.after(0) {
-                if (result?.optBoolean("success", false) == false) {
-                    vm.banner = result.optString("error").ifEmpty { "分享失败，请稍后重试" }
-                }
-            }
-        }
+        ) { }
     }
 
     fun copyText(text: String) {
         if (text.isBlank()) return
-        runtime.shareModule().copy(text) { result ->
-            runtime.after(0) {
-                vm.banner = if (result?.optBoolean("success", false) == true) {
-                    "已复制选中文字"
-                } else {
-                    result?.optString("error").orEmpty().ifBlank { "复制失败，请稍后重试" }
-                }
-            }
-        }
+        runtime.shareModule().copy(text) { }
     }
 
     fun toggleAttachmentPanel() {
@@ -249,7 +200,6 @@ internal class StockChatActions(
                 val attachments = result?.optJSONArray("attachments")?.let(::decodeAttachments).orEmpty()
                 if (attachments.isNotEmpty()) {
                     vm.addPendingAttachments(attachments)
-                    vm.banner = "已添加${attachments.size}个附件，可继续编辑后发送"
                 }
                 host.attachmentPanelVisible = false
                 host.voiceMode = false
@@ -292,7 +242,6 @@ internal class StockChatActions(
         host.voiceMode = !host.voiceMode
         if (host.voiceMode) {
             dismissKeyboard()
-            vm.banner = ""
         }
         syncAccessoryBackHandler()
     }
@@ -306,6 +255,7 @@ internal class StockChatActions(
     private fun abortVoiceRecording() {
         ++voiceStartGeneration
         voiceGestureActive = false
+        pendingVoiceFinish = null
         runtime.voiceModule.cancelListening()
         resetVoiceRecording()
     }
@@ -316,27 +266,37 @@ internal class StockChatActions(
                 if (!host.voiceMode || host.voiceRecording) return
                 val generation = ++voiceStartGeneration
                 voiceGestureActive = true
+                pendingVoiceFinish = null
                 host.voiceFingerX = params.pageX
                 host.voiceFingerY = params.pageY
                 host.voiceZone = VoiceRecordZone.SEND
                 runtime.voiceModule.startListening { result ->
                     runtime.after(0) {
-                        if (generation != voiceStartGeneration || !voiceGestureActive) {
-                            if (result.success && generation == voiceStartGeneration) {
-                                runtime.voiceModule.cancelListening()
-                                vm.banner = "语音能力已就绪，请重新按住说话"
-                            }
+                        if (generation != voiceStartGeneration) {
+                            if (result.success) runtime.voiceModule.cancelListening()
                             return@after
                         }
                         if (!result.success) {
-                            vm.banner = result.message
+                            voiceGestureActive = false
+                            pendingVoiceFinish = null
+                            showVoiceHint(result.message.ifBlank { "无法启动录音" })
+                            return@after
+                        }
+                        val pending = pendingVoiceFinish
+                        if (pending != null) {
+                            pendingVoiceFinish = null
+                            voiceGestureActive = false
+                            completeVoice(pending)
+                            return@after
+                        }
+                        if (!voiceGestureActive) {
+                            runtime.voiceModule.cancelListening()
                             return@after
                         }
                         host.voiceRecording = true
                         host.voiceZone = VoiceRecordZone.SEND
                         host.voiceFingerX = params.pageX
                         host.voiceFingerY = params.pageY
-                        vm.banner = ""
                         startVoiceWave()
                         syncAccessoryBackHandler()
                     }
@@ -354,54 +314,61 @@ internal class StockChatActions(
                 )
             }
             "end" -> {
-                voiceGestureActive = false
-                if (!host.voiceRecording) return
                 val zone = if (params.isCancel) VoiceRecordZone.CANCEL else host.voiceZone
+                if (!host.voiceRecording) {
+                    if (voiceGestureActive) pendingVoiceFinish = zone
+                    return
+                }
+                voiceGestureActive = false
+                pendingVoiceFinish = null
                 resetVoiceRecording()
                 syncAccessoryBackHandler()
-                when (zone) {
-                    VoiceRecordZone.CANCEL -> {
-                        runtime.voiceModule.cancelListening()
-                        vm.banner = "已取消语音输入"
-                    }
-                    VoiceRecordZone.EDIT -> finishVoiceToComposer()
-                    VoiceRecordZone.SEND -> finishVoiceToSend()
-                }
+                completeVoice(zone)
             }
         }
     }
 
+    private fun completeVoice(zone: VoiceRecordZone) {
+        when (zone) {
+            VoiceRecordZone.CANCEL -> runtime.voiceModule.cancelListening()
+            VoiceRecordZone.EDIT -> finishVoiceToComposer()
+            VoiceRecordZone.SEND -> finishVoiceToSend()
+        }
+    }
+
     private fun finishVoiceToSend() {
-        vm.banner = "正在识别语音…"
         runtime.voiceModule.finishListening { result ->
             runtime.after(0) {
                 val text = result.text
-                if (!text.isNullOrBlank()) {
-                    vm.banner = ""
-                    sendPrompt(text)
-                } else {
-                    vm.banner = result.error ?: "未识别到有效语音"
-                }
+                if (!text.isNullOrBlank()) sendPrompt(text)
+                else showVoiceHint(result.error.orEmpty().ifBlank { "未识别到有效语音，请再说一次" })
             }
         }
     }
 
     private fun finishVoiceToComposer() {
-        vm.banner = "正在识别语音…"
         runtime.voiceModule.finishListening { result ->
             runtime.after(0) {
                 val text = result.text
-                if (!text.isNullOrBlank()) {
-                    vm.banner = ""
-                    host.voiceMode = false
-                    vm.inputText = text
-                    host.inputRef?.view?.setText(text)
-                    host.inputRef?.view?.focus()
-                    syncAccessoryBackHandler()
-                } else {
-                    vm.banner = result.error ?: "未识别到有效语音"
+                if (text.isNullOrBlank()) {
+                    showVoiceHint(result.error.orEmpty().ifBlank { "未识别到有效语音，请再说一次" })
+                    return@after
                 }
+                host.voiceMode = false
+                vm.inputText = text
+                host.inputRef?.view?.setText(text)
+                host.inputRef?.view?.focus()
+                syncAccessoryBackHandler()
             }
+        }
+    }
+
+    private fun showVoiceHint(message: String) {
+        if (message.isBlank()) return
+        val generation = ++voiceHintGeneration
+        host.voiceHint = message
+        runtime.after(2_400) {
+            if (generation == voiceHintGeneration) host.voiceHint = ""
         }
     }
 

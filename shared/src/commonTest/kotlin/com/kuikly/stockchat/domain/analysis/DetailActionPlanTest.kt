@@ -13,9 +13,10 @@ class DetailActionPlanTest {
         val plan = DetailActionPlan.from(quote(428.4, 0.66), analysis(score = 72, rsi = 58.0))
         assertEquals("逢低关注", plan.stance)
         assertEquals(TagTone.POSITIVE, plan.stanceTone)
-        assertEquals(listOf("关注区", "现价", "压力区"), plan.levels.map { it.label })
+        assertEquals(listOf("买入观察", "现价", "卖出观察"), plan.levels.map { it.label })
         assertTrue(plan.signals.any { it.title == "短期" && it.value == "偏多" })
-        assertTrue(plan.operationTip.contains("关注区"))
+        assertTrue(plan.levels.first { it.label == "买入观察" }.gap.contains("距现价"))
+        assertTrue(plan.operationTip.contains("买入观察"))
     }
 
     @Test

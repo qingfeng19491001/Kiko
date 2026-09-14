@@ -5,6 +5,7 @@ import com.kuikly.stockchat.ui.chat.ChartProbe
 import com.kuikly.stockchat.ui.stockadapter.StockChartState
 import com.kuikly.stockchat.ui.stockadapter.StockTableState
 import com.tencent.kuikly.core.base.ViewContainer
+import com.tencent.kuikly.core.directives.vbind
 
 fun ViewContainer<*, *>.AnswerBlockView(
     block: AnswerBlock,
@@ -19,7 +20,9 @@ fun ViewContainer<*, *>.AnswerBlockView(
         is AnswerBlock.Markdown -> Unit // 由流式 Markdown 组件单独渲染
         is AnswerBlock.StockCard -> StockCardView(block, contentWidth, onOpenInstrument)
         is AnswerBlock.CompareCard -> CompareCardView(block, contentWidth, onOpenInstrument, tableState)
-        is AnswerBlock.ChartCard -> ChartCardView(block, contentWidth, onOpenInstrument, onFollowUp, probe)
+        is AnswerBlock.ChartCard -> vbind({ probe?.index ?: -1 }) {
+            ChartCardView(block, contentWidth, onOpenInstrument, onFollowUp, probe)
+        }
         is AnswerBlock.MetricGrid -> MetricGridView(block, contentWidth)
         is AnswerBlock.Tags -> TagsView(block)
         is AnswerBlock.Risk -> RiskView(block)
@@ -33,7 +36,7 @@ fun ViewContainer<*, *>.AnswerBlockView(
         is AnswerBlock.LimitUpLadderCard -> LimitUpLadderCardView(block)
         is AnswerBlock.CapitalFlowCard -> CapitalFlowCardView(block, contentWidth, tableState)
         is AnswerBlock.PeerTableCard -> PeerTableCardView(block, contentWidth, onOpenInstrument, tableState)
-        is AnswerBlock.SeriesChartCard -> SeriesChartCardView(block, contentWidth, chartState)
+        is AnswerBlock.SeriesChartCard -> SeriesChartCardView(block, contentWidth, chartState, probe)
         is AnswerBlock.HighlightsCard -> HighlightsCardView(block)
     }
 }

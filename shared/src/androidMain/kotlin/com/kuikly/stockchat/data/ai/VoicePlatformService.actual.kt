@@ -13,7 +13,6 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -131,7 +130,8 @@ actual class VoicePlatformService actual constructor(
         val audio = audioFile.readBytes()
         val request = Request.Builder().url(baseUrl)
             .header("X-Api-Key", apiKey).header("X-Api-Resource-Id", ASR_RESOURCE_ID)
-            .header("X-Api-Request-Id", UUID.randomUUID().toString()).build()
+            .header("X-Api-Request-Id", UUID.randomUUID().toString())
+            .header("X-Api-Connect-Id", UUID.randomUUID().toString()).build()
         val socket = httpClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 val payload = JSONObject().apply {
@@ -303,9 +303,7 @@ private object VolcFrame {
         val parsed = parse(bytes)
         if (parsed.type == TYPE_ERROR) return AsrResult(error = parsed.payloadText)
         val root = runCatching { JSONObject(parsed.payloadText) }.getOrNull() ?: return AsrResult(last = parsed.last)
-        val payload = root.optJSONObject("payload_msg") ?: root
-        val results = payload.optJSONArray("result") ?: JSONArray()
-        val text = (0 until results.length()).mapNotNull { results.optJSONObject(it)?.optString("text") }.lastOrNull { it.isNotBlank() }
+        val text = VolcAsrText.extract(parsed.payloadText)
         val code = root.optInt("code", 0)
         return AsrResult(text, parsed.last || root.optBoolean("is_last_package"), if (code == 0) null else root.optString("message", "服务错误 $code"))
     }

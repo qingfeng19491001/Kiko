@@ -38,6 +38,12 @@ Kiko 是面向股票行情与 AI 问答的跨端应用。业务与界面写在�
 
 三端行情 → 个股 → AI 问答走查。点开仓库内视频即可在 GitHub 文件页播放。
 
+### Android 安装包
+
+[kiko-android.apk](docs/kiko-android.apk)
+
+Android 8.0+ 真机可直接安装（debug 签名）。首次安装需允许「未知来源」。下载后点开即可体验行情与 AI 问答。
+
 ## 项目简介
 
 用户可以按市场浏览真实行情、点进个股看 K 线工作区，也可以直接问 AI 排名、对比或仓位观察。本地用行情快照和技术分析拼出可核对的数字卡片，模型只写章节解读，再按「标题 → 文字 → 数据卡」穿插成一篇回答。点卡片进详情，详情十字光标选点也能带回聊天。
@@ -152,6 +158,20 @@ kuikly-stock-chat/
 
 `AnswerComposer` 用快照和技术分析出可复现数字；百炼按章节写解读；`AnswerAssembler` 把两段缝成一篇研报。Key 缺失或模型失败直接说原因，不换套话。
 
+AI 回复不只落 Markdown：同一条回答按业务穿插行情卡、同行表、分组柱、相对走势折线、技术分仪表盘、日 K 与涨跌柱。模型写解读，结构化块用真实行情画，点卡片还能进详情。
+
+| 阶段表现分组柱状图 | 相对走势折线图 | 技术评分仪表盘与日 K |
+| :---: | :---: | :---: |
+| <img src="docs/preview/chat-grouped-bar.png" width="220" alt="阶段表现分组柱状图" /> | <img src="docs/preview/chat-relative-line.png" width="220" alt="相对走势折线图" /> | <img src="docs/preview/chat-gauge-kline.png" width="220" alt="技术评分仪表盘与日 K" /> |
+
+### 动画打磨
+
+欢迎页、抽屉、语音都按手势走过渡，不硬切。点输入框时欢迎语和推荐问一起收起、输入条展开；侧栏跟手并带回弹；按住说话升起波形，松开发送 / 左滑取消 / 右滑编辑。
+
+| 输入框与欢迎语联动 | 抽屉栏 | 语音输入 |
+| :---: | :---: | :---: |
+| <img src="docs/preview/anim-composer.gif" width="220" alt="输入框与欢迎语联动" /> | <img src="docs/preview/anim-drawer.gif" width="220" alt="抽屉栏" /> | <img src="docs/preview/anim-voice.gif" width="220" alt="语音输入" /> |
+
 ### 研究过程可核对
 
 进度和「用了几类数据源、几个标的、多少根日 K」来自本轮真实调用，不是假倒计时，也不伪造网页检索条数。
@@ -167,6 +187,16 @@ kuikly-stock-chat/
 ### 组件与业务拆仓
 
 `:components` 无 `@Page`，图表 / 表格 / Markdown 独立，避免 KSP 入口冲突。Task 1 与 Task 2 在同一仓库交付，行情与卡片数字可回溯到接口。
+
+### 通用组件库孵化
+
+问答和详情里用到的可视化，按能力拆成可复用仓库，不绑死股票业务。本仓库继续做场景，组件库单独演进。
+
+| 组件 | 仓库 |
+| --- | --- |
+| K 线图 | [KuiklyKLineChart](https://github.com/qingfeng19491001/KuiklyKLineChart) |
+| 图表 | [KuiklyChart](https://github.com/qingfeng19491001/KuiklyChart) |
+| 表格 | [KuiklyTableView](https://github.com/qingfeng19491001/KuiklyTableView) |
 
 ## 开发与测试
 

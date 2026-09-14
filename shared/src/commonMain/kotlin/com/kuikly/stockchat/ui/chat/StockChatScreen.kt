@@ -33,6 +33,7 @@ internal interface StockChatScreenHost {
     var voiceWavePhase: Int
     var voiceFingerX: Float
     var voiceFingerY: Float
+    var voiceHint: String
     var promptPage: Int
     var listRef: ViewRef<ListView<*, *>>?
     var inputRef: ViewRef<InputView>?
@@ -54,7 +55,6 @@ internal interface StockChatScreenHost {
     fun selectAttachment(type: String)
     fun openDetail(instrumentKey: String)
     fun openSettings()
-    fun openDrawerSkill(skill: DrawerSkill)
     fun handleHomeSwipe(params: PanGestureParams)
     fun handleCloseSwipe(params: PanGestureParams)
     fun scrollToBottom(animated: Boolean)
@@ -107,9 +107,6 @@ internal fun StockChatScreen(
                     onTts = host::toggleTts,
                     onMarket = host::openMarket,
                 )
-                vif({ host.chatViewModel.banner.isNotEmpty() }) {
-                    ChatBanner(host)
-                }
                 vif({ !host.chatViewModel.hasConversation }) {
                     View {
                         attr { flex(1f); backgroundColor(Color.WHITE) }
@@ -149,7 +146,6 @@ internal fun StockChatScreen(
                                         onOpenInstrument = host::openDetail,
                                         onFollowUp = host::sendPrompt,
                                         onRetry = host.chatViewModel::retryLast,
-                                        onSpeak = host::speakMessage,
                                         onFeedback = host::feedback,
                                         onShare = host::shareMessage,
                                         onCopy = host::copyText,
@@ -160,16 +156,32 @@ internal fun StockChatScreen(
                         View { attr { height(20f) } }
                     }
                 }
-                ComposerCapsulesView(
-                    pageWidth = pageWidth,
-                    promptPage = { host.promptPage },
-                    visible = {
-                        host.keyboardHeight == 0f && !host.voiceMode && !host.attachmentPanelVisible
-                    },
-                    onShuffle = { host.promptPage += 1 },
-                    onPrompt = host::sendPrompt,
-                )
-                ComposerView(
+                View {
+                    attr { backgroundColor(Color.WHITE) }
+                    ComposerCapsulesView(
+                        pageWidth = pageWidth,
+                        promptPage = { host.promptPage },
+                        visible = {
+                            host.keyboardHeight == 0f && !host.voiceMode && !host.attachmentPanelVisible
+                        },
+                        onShuffle = { host.promptPage += 1 },
+                        onPrompt = host::sendPrompt,
+                    )
+                    vif({ host.voiceHint.isNotBlank() }) {
+                        Text {
+                            attr {
+                                text(host.voiceHint)
+                                fontSize(12f)
+                                color(AppTheme.textSecondary)
+                                textAlignCenter()
+                                marginTop(4f)
+                                marginBottom(2f)
+                                marginLeft(AppTheme.pageHorizontalPadding)
+                                marginRight(AppTheme.pageHorizontalPadding)
+                            }
+                        }
+                    }
+                    ComposerView(
                     vm = host.chatViewModel,
                     expanded = {
                         (host.composerFocused || host.keyboardHeight > 0f) && !host.attachmentPanelVisible
@@ -197,7 +209,8 @@ internal fun StockChatScreen(
                     onPickPhoto = { host.selectAttachment("照片") },
                     onPickFile = { host.selectAttachment("本地文件") },
                     onRemoveAttachment = host.chatViewModel::removePendingAttachment,
-                )
+                    )
+                }
             }
             VoiceRecordingOverlay(
                 visible = { host.voiceRecording },
@@ -232,34 +245,8 @@ internal fun StockChatScreen(
                 onDelete = { if (!host.suppressDrawerClick) host.chatViewModel.deleteConversation(it) },
                 onNewChat = { if (!host.suppressDrawerClick) host.chatViewModel.newConversation() },
                 onSettings = { if (!host.suppressDrawerClick) host.openSettings() },
-                onSkill = { if (!host.suppressDrawerClick) host.openDrawerSkill(it) },
                 onPan = host::handleCloseSwipe,
             )
-        }
-    }
-}
-
-private fun com.tencent.kuikly.core.base.ViewContainer<*, *>.ChatBanner(host: StockChatScreenHost) {
-    View {
-        attr {
-            flexDirectionRow(); alignItemsCenter()
-            backgroundColor(AppTheme.warningSoft)
-            paddingLeft(16f); paddingRight(16f); paddingTop(6f); paddingBottom(6f)
-        }
-        Icon(IconKind.WIFI_OFF, 14f, AppTheme.warning)
-        Text {
-            attr {
-                text(host.chatViewModel.banner)
-                fontSize(12f)
-                color(AppTheme.warning)
-                marginLeft(6f)
-                flex(1f)
-            }
-        }
-        View {
-            attr { padding(4f) }
-            event { click { host.chatViewModel.banner = "" } }
-            Icon(IconKind.CLOSE, 14f, AppTheme.warning)
         }
     }
 }

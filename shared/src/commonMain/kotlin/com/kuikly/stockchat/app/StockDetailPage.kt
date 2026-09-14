@@ -23,7 +23,7 @@ import com.tencent.kuikly.core.reactive.handler.observable
 
 /**
  * 个股 / 指数详情页：行情头部 + 周期栏 + 完整 K 线工作区（一主图二副图），
- * 基础行情下方用页内 Tab 承载诊股 / 简况 / 技术 / 资金 / 板块，避免长页堆叠。
+ * 基础行情下方用页内 Tab 承载诊股（解读 / 点位 / 信号 / 预测 / 风险）、简况、技术、资金、板块。
  */
 @Page("StockDetail")
 internal class StockDetailPage : Pager(), StockDetailScreenHost {

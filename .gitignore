@@ -15,6 +15,9 @@ REPORT.md
 # local secrets (copy from AiSecrets.kt.example)
 shared/src/commonMain/kotlin/com/kuikly/stockchat/data/ai/AiSecrets.kt
 
+# local demo packages (keys baked in)
+dist/
+
 # IDE
 .idea/
 *.iml

@@ -25,7 +25,7 @@ object PeerSeriesMapper {
             ChartSeries(
                 name = ins.name,
                 instrumentKey = ins.key,
-                colorArgb = ins.logoColor,
+                colorArgb = ChartPalette.color(i, ins.logoColor),
                 values = aligned.map { (_, closes) ->
                     val indexed: Double? = closes[i] / bases[i] * 100.0
                     indexed
@@ -60,7 +60,7 @@ object PeerSeriesMapper {
             ChartSeries(
                 name = ins.name,
                 instrumentKey = ins.key,
-                colorArgb = ins.logoColor,
+                colorArgb = ChartPalette.color(i, ins.logoColor),
                 values = monthKeys.map { month ->
                     val prev = tail[tail.indexOf(month) - 1]
                     val cur = closes[month]
@@ -69,14 +69,19 @@ object PeerSeriesMapper {
                 },
             )
         }
-        if (series.all { it.values.all { v -> v == null } }) return null
+        val kept = monthKeys.indices.filter { index -> series.any { it.values.getOrNull(index) != null } }
+        if (kept.isEmpty()) return null
+        val visibleKeys = kept.map { monthKeys[it] }
+        val visibleSeries = series.map { line ->
+            line.copy(values = kept.map { line.values[it] })
+        }
         return AnswerBlock.SeriesChartCard(
-            title = "${nameList(snapshots)}近 ${monthKeys.size} 个月涨跌幅对比",
+            title = "${nameList(snapshots)}近 ${visibleKeys.size} 个月涨跌幅对比",
             subtitle = "各月最后一个交易日相对上月",
             unit = "%",
             kind = SeriesChartKind.GROUPED_BAR,
-            categories = monthKeys.map { it.takeLast(5) },
-            series = series,
+            categories = visibleKeys.map { monthLabel(it) },
+            series = visibleSeries,
         )
     }
 
@@ -132,4 +137,23 @@ object PeerSeriesMapper {
         val d = normalizeDate(date)
         return if (d.length >= 10) d.substring(5, 10) else d
     }
+
+    private fun monthLabel(yearMonth: String): String {
+        val d = normalizeDate(yearMonth)
+        return if (d.length >= 7) d.substring(2, 7) else d
+    }
+}
+
+/** 同图多序列不用 logo 色：腾讯/百度等品牌蓝会撞在一起。 */
+internal object ChartPalette {
+    private val colors = listOf(
+        0xFF2F54EBL,
+        0xFF13A8A8L,
+        0xFFE85D04L,
+        0xFF7C3AEDL,
+        0xFF12924AL,
+        0xFFD93B3BL,
+    )
+
+    fun color(index: Int, fallback: Long): Long = colors.getOrNull(index) ?: fallback
 }

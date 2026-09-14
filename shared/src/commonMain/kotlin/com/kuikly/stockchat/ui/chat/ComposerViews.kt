@@ -32,7 +32,7 @@ fun ViewContainer<*, *>.ComposerCapsulesView(
         attr {
             val isVisible = visible()
             width(pageWidth)
-            height(if (isVisible) 36f else 0f)
+            height(if (isVisible) 32f else 0f)
             opacity(if (isVisible) 1f else 0f)
             overflow(false)
             animation(Animation.easeOut(0.2f), isVisible)
@@ -41,7 +41,7 @@ fun ViewContainer<*, *>.ComposerCapsulesView(
             attr {
                 flexDirectionRow()
                 alignItemsCenter()
-                height(36f)
+                height(32f)
                 showScrollerIndicator(false)
                 bouncesEnable(true)
             }
@@ -112,7 +112,7 @@ fun ViewContainer<*, *>.ComposerView(
                 val isExpanded = expanded() && !attachmentPanelVisible()
                 paddingLeft(AppTheme.pageHorizontalPadding)
                 paddingRight(AppTheme.pageHorizontalPadding)
-                paddingTop(8f)
+                paddingTop(4f)
                 paddingBottom(if (isExpanded) 8f else 0f)
                 animation(Animation.easeOut(0.24f), if (attachmentPanelVisible()) false else isExpanded)
             }

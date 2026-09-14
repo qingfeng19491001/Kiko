@@ -10,10 +10,13 @@ import com.kuikly.stockchat.domain.util.NumberFormat
 import com.kuikly.stockchat.ui.theme.AppTheme
 import com.tencent.kuikly.core.base.Color
 import com.tencent.kuikly.core.base.ViewContainer
+import com.tencent.kuikly.core.base.attr.CaptureRule
+import com.tencent.kuikly.core.base.attr.CaptureRuleDirection
 import com.tencent.kuikly.core.base.event.Event
 import com.tencent.kuikly.core.views.Canvas
 import com.tencent.kuikly.core.views.CanvasContext
 import com.tencent.kuikly.core.views.TextAlign
+import com.tencent.kuikly.core.views.View
 import kotlin.math.PI
 import kotlin.math.max
 import kotlin.math.min
@@ -63,13 +66,19 @@ fun ViewContainer<*, *>.CandleChart(
     selectedIndex: Int = -1,
     onSelectIndex: ((Int) -> Unit)? = null,
 ) {
-    Canvas({
-        attr { size(width, height) }
+    View {
+        attr {
+            size(width, height)
+            capture(CaptureRule.pan(CaptureRuleDirection.HORIZONTAL))
+        }
         event {
             onSelectIndex?.let { handler -> bindChartHit(bars.size, width, 46f, handler) }
         }
-    }) { ctx, w, h ->
-        ChartPainter.candles(ctx, bars, w, h, showVolume, showMa, showAxis, selectedIndex)
+        Canvas({
+            attr { size(width, height) }
+        }) { ctx, w, h ->
+            ChartPainter.candles(ctx, bars, w, h, showVolume, showMa, showAxis, selectedIndex)
+        }
     }
 }
 
@@ -84,13 +93,19 @@ fun ViewContainer<*, *>.BarChart(
     selectedIndex: Int = -1,
     onSelectIndex: ((Int) -> Unit)? = null,
 ) {
-    Canvas({
-        attr { size(width, height) }
+    View {
+        attr {
+            size(width, height)
+            capture(CaptureRule.pan(CaptureRuleDirection.HORIZONTAL))
+        }
         event {
             onSelectIndex?.let { handler -> bindChartHit(entries.size, width, 44f, handler) }
         }
-    }) { ctx, w, h ->
-        ChartPainter.bar(ctx, entries, w, h, unit, selectedIndex)
+        Canvas({
+            attr { size(width, height) }
+        }) { ctx, w, h ->
+            ChartPainter.bar(ctx, entries, w, h, unit, selectedIndex)
+        }
     }
 }
 
@@ -104,15 +119,21 @@ fun ViewContainer<*, *>.SeriesChart(
     selectedIndex: Int = -1,
     onSelectIndex: ((Int) -> Unit)? = null,
 ) {
-    Canvas({
-        attr { size(width, height) }
+    View {
+        attr {
+            size(width, height)
+            capture(CaptureRule.pan(CaptureRuleDirection.HORIZONTAL))
+        }
         event {
             onSelectIndex?.let { handler -> bindChartHit(categories.size, width, 46f, handler) }
         }
-    }) { ctx, w, h ->
-        when (kind) {
-            SeriesChartKind.LINE -> ChartPainter.multiLine(ctx, categories, series, w, h, unit, selectedIndex)
-            SeriesChartKind.GROUPED_BAR -> ChartPainter.groupedBar(ctx, categories, series, w, h, unit, selectedIndex)
+        Canvas({
+            attr { size(width, height) }
+        }) { ctx, w, h ->
+            when (kind) {
+                SeriesChartKind.LINE -> ChartPainter.multiLine(ctx, categories, series, w, h, unit, selectedIndex)
+                SeriesChartKind.GROUPED_BAR -> ChartPainter.groupedBar(ctx, categories, series, w, h, unit, selectedIndex)
+            }
         }
     }
 }
@@ -537,6 +558,9 @@ object ChartPainter {
             maxV += 1
             minV -= 1
         }
+        val pad = (maxV - minV) * 0.08
+        maxV += pad
+        minV -= pad
         val range = maxV - minV
         val slot = plotW / categories.size
         fun cx(i: Int) = slot * i + slot / 2
@@ -605,11 +629,21 @@ object ChartPainter {
         val plotH = h - topPad - bottomPad
         val values = series.flatMap { it.values }.filterNotNull()
         if (values.isEmpty()) return
-        val maxAbs = values.maxOf { kotlin.math.abs(it) }.let { if (it <= 0) 1.0 else it } * 1.1
-        val zeroY = topPad + (plotH * 0.5f)
+        var maxV = max(0.0, values.max())
+        var minV = min(0.0, values.min())
+        if (maxV == minV) {
+            maxV += 1
+            minV -= 1
+        }
+        val pad = (maxV - minV) * 0.08
+        maxV += pad
+        minV -= pad
+        val range = maxV - minV
+        fun py(v: Double) = topPad + ((maxV - v) / range * plotH).toFloat()
+        val zeroY = py(0.0)
         val slot = plotW / categories.size
         val groupW = slot * 0.78f
-        val barW = max(2f, groupW / series.size)
+        val barW = max(3f, groupW / series.size)
 
         ctx.lineWidth(0.8f)
         ctx.strokeStyle(gridLine)
@@ -619,7 +653,7 @@ object ChartPainter {
             val y = topPad + plotH * i / 4
             ctx.beginPath(); ctx.moveTo(0f, y); ctx.lineTo(plotW, y); ctx.stroke()
             ctx.fillStyle(axisText)
-            val valAtY = maxAbs * (1 - 2.0 * i / 4)
+            val valAtY = maxV - range * i / 4
             ctx.fillText(NumberFormat.fixed(valAtY, 1) + unit, plotW + 4f, y + (if (i == 0) 10f else if (i == 4) -2f else 4f))
         }
         ctx.strokeStyle(Color(0xFFCCD2DEL))
@@ -630,10 +664,10 @@ object ChartPainter {
             series.forEachIndexed { j, line ->
                 val v = line.values.getOrNull(i) ?: return@forEachIndexed
                 val x = slot * i + (slot - groupW) / 2 + j * barW
-                val barH = (kotlin.math.abs(v) / maxAbs * plotH / 2).toFloat()
                 ctx.fillStyle(Color(line.colorArgb))
-                if (v >= 0) fillRect(ctx, x, zeroY - barH, barW - 1f, barH)
-                else fillRect(ctx, x, zeroY, barW - 1f, barH)
+                val top = min(zeroY, py(v))
+                val barH = max(1f, kotlin.math.abs(py(v) - zeroY))
+                fillRect(ctx, x, top, barW - 1.5f, barH)
             }
         }
 

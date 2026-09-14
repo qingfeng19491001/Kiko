@@ -9,5 +9,6 @@ fun ViewContainer<*, *>.FlowPane(
     flow: CapitalFlowData?,
     loading: Boolean,
     onAsk: () -> Unit,
-) = renderFlowPane(quote, flow, loading, onAsk)
+    volumeRatio: Double? = null,
+) = renderFlowPane(quote, flow, loading, onAsk, volumeRatio)
 

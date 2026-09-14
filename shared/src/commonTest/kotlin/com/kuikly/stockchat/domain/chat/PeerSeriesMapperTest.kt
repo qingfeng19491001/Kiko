@@ -23,6 +23,18 @@ class PeerSeriesMapperTest {
         assertEquals(100.0, card.series[1].values.first())
         assertTrue(card.title.contains("相对走势"))
         assertTrue(card.title.contains("腾讯"))
+        assertTrue(card.series.map { it.colorArgb }.toSet().size >= 2)
+    }
+
+    @Test
+    fun monthlyReturnsSkipEmptyMonthsAndUseShortLabels() {
+        val left = snapshot(StockCatalog.tencent, 100.0, barCount = 160)
+        val right = snapshot(StockCatalog.alibaba, 50.0, barCount = 160)
+        val card = PeerSeriesMapper.monthlyReturns(listOf(left, right), months = 6)
+        assertTrue(card != null)
+        assertEquals(SeriesChartKind.GROUPED_BAR, card!!.kind)
+        assertTrue(card.categories.all { it.length == 5 && it[2] == '-' })
+        assertTrue(card.series.none { it.values.all { value -> value == null } })
     }
 
     @Test
@@ -39,10 +51,10 @@ class PeerSeriesMapperTest {
     }
 }
 
-private fun snapshot(instrument: Instrument, price: Double, changePct: Double = 0.0): MarketSnapshot {
-    val bars = (0 until 40).map { i ->
-        val month = 1 + i / 28
-        val day = 1 + i % 28
+private fun snapshot(instrument: Instrument, price: Double, changePct: Double = 0.0, barCount: Int = 40): MarketSnapshot {
+    val bars = (0 until barCount).map { i ->
+        val month = 1 + (i / 20) % 12
+        val day = 1 + i % 20
         val close = price + i
         KLineBar(
             "2026-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}",

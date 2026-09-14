@@ -16,6 +16,7 @@ export class KRVoiceModule extends KuiklyRenderBaseModule {
   private finishCallback: KuiklyRenderCallback | null = null;
   private speakCallback: KuiklyRenderCallback | null = null;
   private capturing: boolean = false;
+  private asrReady: boolean = false;
 
   syncMode(): boolean {
     return false;
@@ -62,6 +63,7 @@ export class KRVoiceModule extends KuiklyRenderBaseModule {
       }
       this.startCallback = callback;
       this.latestText = '';
+      this.asrReady = false;
       await this.ensureAsr();
       this.sessionId = `stockchat${Date.now()}`;
       this.asrEngine?.startListening({
@@ -69,8 +71,14 @@ export class KRVoiceModule extends KuiklyRenderBaseModule {
         audioInfo: { audioType: 'pcm', sampleRate: 16000, soundChannel: 1, sampleBit: 16 }
       });
       await this.startCapturer();
-      this.startCallback?.(JSON.stringify({ success: true }));
-      this.startCallback = null;
+      setTimeout(() => {
+        if (this.startCallback) {
+          this.asrReady = true;
+          const start = this.startCallback;
+          this.startCallback = null;
+          start(JSON.stringify({ success: true }));
+        }
+      }, 600);
     } catch (error) {
       const err = error as BusinessError;
       callback?.(JSON.stringify({ success: false, message: err.message ?? '无法启动录音' }));
@@ -133,7 +141,12 @@ export class KRVoiceModule extends KuiklyRenderBaseModule {
       extraParams: { recognizerMode: 'short' }
     });
     this.asrEngine.setListener({
-      onStart: (_sessionId: string, _message: string) => {},
+      onStart: (_sessionId: string, _message: string) => {
+        this.asrReady = true;
+        const start = this.startCallback;
+        this.startCallback = null;
+        start?.(JSON.stringify({ success: true }));
+      },
       onEvent: (_sessionId: string, _code: number, _message: string) => {},
       onResult: (_sessionId: string, result: speechRecognizer.SpeechRecognitionResult) => {
         if (result.result) {
@@ -215,7 +228,7 @@ export class KRVoiceModule extends KuiklyRenderBaseModule {
       return;
     }
     capturer.read(4096, true).then((data: ArrayBuffer) => {
-      if (data.byteLength > 0 && this.capturing) {
+      if (data.byteLength > 0 && this.capturing && this.asrReady) {
         engine.writeAudio(this.sessionId, new Uint8Array(data));
       }
       if (this.capturing) {
@@ -228,6 +241,7 @@ export class KRVoiceModule extends KuiklyRenderBaseModule {
 
   private stopCapturer(): void {
     this.capturing = false;
+    this.asrReady = false;
     const capturer = this.capturer;
     this.capturer = undefined;
     capturer?.stop().then(() => capturer.release()).catch(() => {});

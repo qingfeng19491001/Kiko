@@ -11,7 +11,6 @@ import com.tencent.kuikly.core.base.attr.CaptureRuleDirection
 import com.tencent.kuikly.core.base.attr.ImageUri
 import com.tencent.kuikly.core.base.Border
 import com.tencent.kuikly.core.base.BorderStyle
-import com.tencent.kuikly.core.base.BoxShadow
 import com.tencent.kuikly.core.base.Color
 import com.tencent.kuikly.core.base.ViewContainer
 import com.tencent.kuikly.core.base.event.Event
@@ -67,7 +66,7 @@ internal fun Event.followPan(handler: (PanGestureParams) -> Unit) {
 }
 
 /**
- * 抽屉内容：顶栏图标 + 技能入口卡（定时任务 / 投资记忆 / 深度研究 / 技能广场） + 按日分组会话 + 底部账号行。
+ * 抽屉内容：顶栏图标 + 按日分组会话 + 底部账号行。
  * 定位（absolutePosition / width / animation）由调用方在 StockChatPage 中处理。
  */
 internal fun ViewContainer<*, *>.HistoryDrawerContent(
@@ -79,7 +78,6 @@ internal fun ViewContainer<*, *>.HistoryDrawerContent(
     onDelete: (id: String) -> Unit,
     onNewChat: () -> Unit,
     onSettings: () -> Unit,
-    onSkill: (DrawerSkill) -> Unit,
     onPan: (PanGestureParams) -> Unit,
 ) {
     View {
@@ -133,9 +131,6 @@ internal fun ViewContainer<*, *>.HistoryDrawerContent(
                     event { textDidChange { vm.onDrawerQueryChange(it.text) } }
                 }
             }
-        }
-        velse {
-            DrawerSkillMenu(onSkill)
         }
         vif({ vm.drawerConversations.isEmpty() }) {
             View {
@@ -211,90 +206,6 @@ internal fun ViewContainer<*, *>.HistoryDrawerContent(
             }
             IconButton(IconKind.SETTINGS, size = 40f, iconSize = 20f, color = AppTheme.textPrimary, onClick = onSettings)
         }
-    }
-}
-
-internal enum class DrawerSkill {
-    SCHEDULE,
-    MEMORY,
-    RESEARCH,
-    PLAZA,
-}
-
-private val researchHighlightBg = Color(0xFFFFF6E3L)
-private val researchHighlightFg = Color(0xFF8A6A2BL)
-
-private fun ViewContainer<*, *>.DrawerSkillMenu(onSkill: (DrawerSkill) -> Unit) {
-    View {
-        attr {
-            marginLeft(16f); marginRight(16f); marginTop(6f); marginBottom(8f)
-            paddingTop(6f); paddingBottom(6f)
-            borderRadius(20f)
-            backgroundColor(Color.WHITE)
-            boxShadow(BoxShadow(0f, 2f, 12f, Color(0x0F000000L)))
-        }
-        DrawerSkillRow(
-            icon = IconKind.CALENDAR,
-            title = "定时任务",
-            trailing = IconKind.CHEVRON_RIGHT,
-            onClick = { onSkill(DrawerSkill.SCHEDULE) },
-        )
-        DrawerSkillRow(
-            icon = IconKind.MEMORY,
-            title = "投资记忆",
-            trailing = IconKind.CHEVRON_RIGHT,
-            onClick = { onSkill(DrawerSkill.MEMORY) },
-        )
-        DrawerSkillRow(
-            icon = IconKind.HEX_CUBE,
-            title = "深度研究",
-            trailing = IconKind.ARROW_UP_RIGHT,
-            highlighted = true,
-            onClick = { onSkill(DrawerSkill.RESEARCH) },
-        )
-        DrawerSkillRow(
-            icon = IconKind.GRID,
-            title = "技能广场",
-            trailing = IconKind.CHEVRON_RIGHT,
-            onClick = { onSkill(DrawerSkill.PLAZA) },
-        )
-    }
-}
-
-private fun ViewContainer<*, *>.DrawerSkillRow(
-    icon: IconKind,
-    title: String,
-    trailing: IconKind,
-    highlighted: Boolean = false,
-    onClick: () -> Unit,
-) {
-    val fg = if (highlighted) researchHighlightFg else AppTheme.textPrimary
-    val trailingColor = if (highlighted) researchHighlightFg else AppTheme.textTertiary
-    View {
-        attr {
-            height(48f)
-            flexDirectionRow()
-            alignItemsCenter()
-            marginLeft(8f)
-            marginRight(8f)
-            paddingLeft(8f)
-            paddingRight(8f)
-            borderRadius(14f)
-            backgroundColor(if (highlighted) researchHighlightBg else Color.TRANSPARENT)
-        }
-        event { click { onClick() } }
-        Icon(icon, 20f, fg, 1.6f)
-        Text {
-            attr {
-                text(title)
-                fontSize(16f)
-                fontWeight600()
-                color(fg)
-                marginLeft(10f)
-                flex(1f)
-            }
-        }
-        Icon(trailing, 16f, trailingColor, 1.7f)
     }
 }
 

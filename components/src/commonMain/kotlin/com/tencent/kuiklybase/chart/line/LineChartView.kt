@@ -21,6 +21,10 @@ class LineChartView(seriesProvider: () -> ObservableList<ChartSeries>) :
 
     override fun createAttr() = LineChartAttr()
 
+    override fun computeDefaultViewport(data: List<ChartSeries>): ChartViewport {
+        return ChartViewport.fromSeries(data, isCategoryX = isCategoryX, includeZero = false)
+    }
+
     override fun buildTooltipText(
         data: List<ChartSeries>,
         seriesIndex: Int,

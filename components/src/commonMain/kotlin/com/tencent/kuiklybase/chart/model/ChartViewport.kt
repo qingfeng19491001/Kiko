@@ -14,6 +14,8 @@ data class ChartViewport(
             stacked: Boolean = false,
             /** 水平条形图：类目用点的 x，数值用点的 y。 */
             horizontal: Boolean = false,
+            /** 柱状图需要零轴；相对净值折线不应强行从 0 起，否则曲线被压到顶部。 */
+            includeZero: Boolean = true,
         ): ChartViewport {
             if (series.isEmpty() || series.all { it.points.isEmpty() }) {
                 return ChartViewport(0f, 1f, 0f, 1f)
@@ -87,11 +89,21 @@ data class ChartViewport(
             }
             val xPad = (xMax - xMin) * paddingRatio
             val yPad = (yMax - yMin) * paddingRatio
+            val paddedYMin = yMin - yPad
+            val paddedYMax = yMax + yPad
             return ChartViewport(
                 xMin = xMin - xPad,
                 xMax = xMax + xPad,
-                yMin = if (horizontal) yMin - yPad else minOf(0f, yMin - yPad),
-                yMax = if (horizontal) yMax + yPad else maxOf(0f, yMax + yPad),
+                yMin = when {
+                    horizontal -> paddedYMin
+                    includeZero -> minOf(0f, paddedYMin)
+                    else -> paddedYMin
+                },
+                yMax = when {
+                    horizontal -> paddedYMax
+                    includeZero -> maxOf(0f, paddedYMax)
+                    else -> paddedYMax
+                },
             )
         }
 

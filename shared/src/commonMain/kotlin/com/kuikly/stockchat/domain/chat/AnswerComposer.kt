@@ -1,6 +1,7 @@
 package com.kuikly.stockchat.domain.chat
 
 import com.kuikly.stockchat.domain.analysis.AnalysisEngine
+import com.kuikly.stockchat.domain.analysis.DetailInsightBrief
 import com.kuikly.stockchat.domain.analysis.InsightTag
 import com.kuikly.stockchat.domain.analysis.TagTone
 import com.kuikly.stockchat.domain.analysis.TechnicalAnalysis
@@ -714,29 +715,9 @@ object AnswerComposer {
 
     // endregion
 
-    /** 详情页 AI 深度解读文案 */
-    fun detailInsight(snapshot: MarketSnapshot, analysis: TechnicalAnalysis): String {
-        val q = snapshot.quote
-        val ins = q.instrument
-        val move = if (q.isUp) "上涨" else if (q.isDown) "下跌" else "平盘"
-        val driver = when {
-            ins.isIndex -> "受权重股表现与市场流动性预期影响"
-            ins.sector.contains("互联网") -> "受益于核心业务回暖与市场对新业务增长的预期"
-            ins.sector.contains("新能源") || ins.sector.contains("电动车") -> "受行业销量数据与价格竞争预期影响"
-            ins.sector.contains("消费") || ins.sector.contains("白酒") -> "受消费复苏预期与渠道动销数据影响"
-            ins.sector.contains("金融") -> "受利率环境与资产质量预期影响"
-            else -> "受行业景气度与资金偏好变化影响"
-        }
-        return "${ins.name}今日${move} ${NumberFormat.signedPct(q.changePct)}，$driver。" +
-            "技术面${maComment(q.price, analysis).trimEnd('。')}，" +
-            "关注上方 ${NumberFormat.price(analysis.resistance)} 压力位的突破情况。" +
-            (analysis.rsi14?.let { " RSI ${NumberFormat.fixed(it, 0)}，${rsiComment(it).trimEnd('。')}。" } ?: "") +
-            when (analysis.score) {
-                in 65..100 -> "建议关注后续财报与业绩指引，可在回踩均线附近分批布局。"
-                in 0..38 -> "建议等待止跌信号明确后再行评估，控制仓位。"
-                else -> "建议以区间思维操作，逢低关注、逢高兑现。"
-            }
-    }
+    /** 详情页 AI 深度解读文案（与诊股结构化摘要同源） */
+    fun detailInsight(snapshot: MarketSnapshot, analysis: TechnicalAnalysis): String =
+        DetailInsightBrief.from(snapshot.quote, analysis).asParagraph()
 
     fun insightTags(analysis: TechnicalAnalysis): List<InsightTag> = analysis.tags
 }

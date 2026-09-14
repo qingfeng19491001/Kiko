@@ -11,7 +11,6 @@ import com.kuikly.stockchat.data.codec.InstrumentCodec
 import com.kuikly.stockchat.ui.chat.ChatViewModel
 import com.kuikly.stockchat.ui.chat.ChatUiMessage
 import com.kuikly.stockchat.ui.chat.DrawerState
-import com.kuikly.stockchat.ui.chat.DrawerSkill
 import com.kuikly.stockchat.ui.chat.StockChatActions
 import com.kuikly.stockchat.ui.chat.StockChatRuntime
 import com.kuikly.stockchat.ui.chat.StockChatScreen
@@ -56,6 +55,7 @@ internal class StockChatPage : Pager(), StockChatScreenHost, StockChatRuntime {
     override var voiceWavePhase by observable(0)
     override var voiceFingerX by observable(0f)
     override var voiceFingerY by observable(0f)
+    override var voiceHint by observable("")
     override var promptPage by observable(0)
     override var listRef: ViewRef<ListView<*, *>>? = null
     override var inputRef: ViewRef<InputView>? = null
@@ -77,9 +77,7 @@ internal class StockChatPage : Pager(), StockChatScreenHost, StockChatRuntime {
         vm = createChatViewModel(this)
         vm.onReplyCompleted = { text ->
             if (vm.ttsEnabled) {
-                voiceModule.speak(text) { result ->
-                    if (!result.success) setTimeout(0) { vm.banner = result.message }
-                }
+                voiceModule.speak(text) { }
             }
         }
         vm.loadHistory()
@@ -120,7 +118,6 @@ internal class StockChatPage : Pager(), StockChatScreenHost, StockChatRuntime {
     override fun sendPrompt(text: String) = actions.sendPrompt(text)
     override fun openDrawer() = actions.openDrawer()
     override fun closeDrawer() = actions.closeDrawer()
-    override fun openDrawerSkill(skill: DrawerSkill) = actions.openDrawerSkill(skill)
     override fun toggleTts() = actions.toggleTts()
     override fun speakMessage(message: ChatUiMessage) = actions.speakMessage(message)
     override fun feedback(message: ChatUiMessage, value: Int) = actions.feedback(message, value)

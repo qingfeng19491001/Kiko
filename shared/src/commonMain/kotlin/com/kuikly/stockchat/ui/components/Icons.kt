@@ -17,7 +17,7 @@ enum class IconKind {
     STRATEGY, EYE, RADAR,
     STOP, WIFI_OFF, MESSAGE, CANDLE, SEARCH, VOICE, KEYBOARD, EDIT, SPEAKER, SPEAKER_OFF,
     CAMERA, IMAGE, FOLDER, SETTINGS, LAYERS, MESSAGE_PLUS,
-    THUMBS_UP, THUMBS_DOWN,
+    THUMBS_UP, THUMBS_DOWN, COPY,
     CALENDAR, MEMORY, HEX_CUBE, GRID,
 }
 
@@ -118,6 +118,14 @@ object IconPainter {
                 }
                 ctx.closePath()
                 if (kind == IconKind.STAR_FILLED) ctx.fill() else ctx.stroke()
+            }
+            IconKind.COPY -> {
+                rect(ctx, 8.5f * u, 6.5f * u, 10.5f * u, 13.5f * u)
+                path(ctx) {
+                    moveTo(6.5f * u, 9.5f * u)
+                    lineTo(6.5f * u, 21.5f * u)
+                    lineTo(16.5f * u, 21.5f * u)
+                }
             }
             IconKind.SHARE -> {
                 circle(ctx, 18 * u, 5.5f * u, 2.4f * u, fill = false)

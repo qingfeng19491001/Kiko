@@ -61,8 +61,8 @@ fun ViewContainer<*, *>.StockLineChart(
             attr {
                 flex(1f)
                 this.title = title
-                showPoints = true
-                pointRadius = 3f
+                showPoints = false
+                pointRadius = 2.5f
                 smooth = false
                 xAxis { show = true }
                 yAxis { show = true }

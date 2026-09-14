@@ -1,6 +1,8 @@
 package com.kuikly.stockchat.ui.detail
 
 import com.kuikly.stockchat.domain.analysis.DetailActionPlan
+import com.kuikly.stockchat.domain.analysis.DetailInsightBrief
+import com.kuikly.stockchat.domain.analysis.SignalItem
 import com.kuikly.stockchat.domain.analysis.TechnicalAnalysis
 import com.kuikly.stockchat.domain.analysis.TrendBias
 import com.kuikly.stockchat.domain.model.CapitalFlowData
@@ -17,11 +19,9 @@ import com.kuikly.stockchat.ui.components.TagChip
 import com.kuikly.stockchat.ui.theme.AppTheme
 import com.tencent.kuikly.core.base.Border
 import com.tencent.kuikly.core.base.BorderStyle
-import com.tencent.kuikly.core.base.BoxShadow
 import com.tencent.kuikly.core.base.Color
 import com.tencent.kuikly.core.base.ViewContainer
 import com.tencent.kuikly.core.directives.vbind
-import com.tencent.kuikly.core.directives.vif
 import com.tencent.kuikly.core.views.DivView
 import com.tencent.kuikly.core.views.Text
 import com.tencent.kuikly.core.views.View
@@ -32,7 +32,7 @@ import com.tencent.kuikly.core.views.View
  * 一级：诊股 / 简况 / 技术 / 资金 / 板块；二级随一级切换，避免长页堆叠。
  */
 internal enum class DetailTab(val label: String, val subTabs: List<String>) {
-    DIAGNOSIS("诊股", listOf("全部", "解读", "点位", "预测", "追问", "风险")),
+    DIAGNOSIS("诊股", listOf("全部", "解读", "点位", "信号", "预测", "风险")),
     PROFILE("简况", listOf("全部", "指标", "估值")),
     TECH("技术", emptyList()),
     FLOW("资金", emptyList()),
@@ -143,28 +143,38 @@ internal fun ViewContainer<*, *>.renderDiagnosisPane(
     val analysis = vm.analysis
     val quote = vm.quote
     val plan = if (quote != null && analysis != null) DetailActionPlan.from(quote, analysis) else null
+    val brief = if (quote != null && analysis != null) {
+        DetailInsightBrief.from(quote, analysis, vm.capitalFlow)
+    } else {
+        null
+    }
     if (fromChat && (showAll || subTab == "解读")) {
         ChatHandoffBanner(instrument, chatSummary, onAsk)
     }
     if (showAll || subTab == "解读") {
-        if (analysis != null) {
-            AiInsightCard(vm.insight, analysis, instrument, onAsk, plan)
+        if (brief != null && analysis != null) {
+            AiInsightCard(brief, analysis, instrument, onAsk, plan, vm.prediction?.rationale)
+        } else if (subTab == "解读") {
+            DetailEmptyHint("行情加载后将生成解读。")
         }
     }
     if ((showAll || subTab == "点位") && plan != null && quote != null) {
         ActionLevelsCard(quote, analysis!!, plan)
+        if (vm.stripPoints().isNotEmpty()) {
+            ChartFollowUpBar(vm, onAskSelection)
+        }
     } else if (subTab == "点位") {
-        DetailEmptyHint("行情加载后将给出关注区与压力区。")
+        DetailEmptyHint("行情加载后将给出买入 / 卖出观察点位。")
+    }
+    if (showAll || subTab == "信号") {
+        if (plan != null) {
+            SignalReadingCard(plan, DetailInsightBrief.flowSignal(vm.capitalFlow), instrument, onAsk)
+        } else if (subTab == "信号") {
+            DetailEmptyHint("行情加载后将解读趋势、动能与量能信号。")
+        }
     }
     if (showAll || subTab == "预测") {
         PredictionCard(vm)
-    }
-    if (showAll || subTab == "追问") {
-        if (vm.stripPoints().isNotEmpty()) {
-            ChartFollowUpBar(vm, onAskSelection)
-        } else if (subTab == "追问") {
-            DetailEmptyHint("暂无可用点位。切换到日 K 后可点选再带回对话。")
-        }
     }
     if (showAll || subTab == "风险") {
         if (vm.risks.isEmpty() && subTab == "风险") {
@@ -194,6 +204,7 @@ internal fun ViewContainer<*, *>.renderFlowPane(
     flow: CapitalFlowData?,
     loading: Boolean,
     onAsk: () -> Unit,
+    volumeRatio: Double? = null,
 ) {
     TabBlock {
         TabHeading("资金与活跃度")
@@ -206,7 +217,7 @@ internal fun ViewContainer<*, *>.renderFlowPane(
         View {
             attr { flexDirectionRow(); marginTop(12f) }
             ValuationCell("振幅", NumberFormat.pct(quote.amplitude), null)
-            ValuationCell("量比", "--", null)
+            ValuationCell("量比", volumeRatio?.let { NumberFormat.fixed(it, 2) } ?: "--", null)
             View { attr { flex(1f) } }
         }
         when {
@@ -490,11 +501,12 @@ private fun ViewContainer<*, *>.ValuationCell(label: String, value: String, colo
 // region AI 解读
 
 fun ViewContainer<*, *>.AiInsightCard(
-    insight: String,
+    brief: DetailInsightBrief,
     analysis: TechnicalAnalysis,
     instrument: Instrument,
     onAsk: (String) -> Unit,
     plan: DetailActionPlan? = null,
+    modelNote: String? = null,
     minHeight: Float = 0f,
 ) {
     TabBlock(minHeight = minHeight) {
@@ -504,23 +516,76 @@ fun ViewContainer<*, *>.AiInsightCard(
             View { attr { flex(1f) } }
             ScoreBadge(analysis.score)
         }
-        plan?.let { ActionStanceRow(it) }
-        Text {
+        View {
             attr {
-                text(insight)
-                fontSize(14f)
-                lineHeight(23f)
-                color(AppTheme.textSecondary)
-                marginTop(12f)
+                marginTop(10f)
+                backgroundColor(AppTheme.toneSoftColor(brief.headlineTone))
+                borderRadius(8f)
+                paddingLeft(10f)
+                paddingRight(10f)
+                paddingTop(8f)
+                paddingBottom(8f)
+            }
+            Text {
+                attr {
+                    text(brief.headline)
+                    fontSize(14f)
+                    fontWeight600()
+                    lineHeight(21f)
+                    color(AppTheme.toneColor(brief.headlineTone))
+                }
+            }
+        }
+        plan?.let { ActionStanceRow(it) }
+        if (brief.snapshotItems.isNotEmpty()) {
+            SignalBoard(brief.snapshotItems)
+        }
+        brief.sections.filterNot { it.title == "操作提示" && plan != null }.forEach { section ->
+            Text {
+                attr {
+                    text(section.title)
+                    fontSize(12f)
+                    fontWeight600()
+                    color(AppTheme.textTertiary)
+                    marginTop(14f)
+                }
+            }
+            Text {
+                attr {
+                    text(section.body)
+                    fontSize(14f)
+                    lineHeight(23f)
+                    color(AppTheme.textSecondary)
+                    marginTop(6f)
+                }
+            }
+        }
+        if (!modelNote.isNullOrBlank()) {
+            Text {
+                attr {
+                    text("模型点评")
+                    fontSize(12f)
+                    fontWeight600()
+                    color(AppTheme.textTertiary)
+                    marginTop(14f)
+                }
+            }
+            Text {
+                attr {
+                    text(modelNote)
+                    fontSize(13f)
+                    lineHeight(21f)
+                    color(AppTheme.textSecondary)
+                    marginTop(6f)
+                }
             }
         }
         if (analysis.tags.isNotEmpty()) {
             View {
-                attr { flexDirectionRow(); flexWrapWrap(); marginTop(4f) }
+                attr { flexDirectionRow(); flexWrapWrap(); marginTop(10f) }
                 analysis.tags.forEach { TagChip(it) }
             }
         }
-        plan?.let { SignalBoard(it) }
         Text {
             attr {
                 text("继续问")
@@ -604,8 +669,8 @@ private fun ViewContainer<*, *>.ActionStanceRow(plan: DetailActionPlan) {
     }
 }
 
-private fun ViewContainer<*, *>.SignalBoard(plan: DetailActionPlan) {
-    plan.signals.chunked(2).forEach { row ->
+private fun ViewContainer<*, *>.SignalBoard(signals: List<SignalItem>) {
+    signals.chunked(2).forEach { row ->
         View {
             attr { flexDirectionRow(); marginTop(10f) }
             row.forEach { signal ->
@@ -636,13 +701,77 @@ private fun ViewContainer<*, *>.SignalBoard(plan: DetailActionPlan) {
     }
 }
 
+private fun ViewContainer<*, *>.SignalReadingCard(
+    plan: DetailActionPlan,
+    flowSignal: SignalItem?,
+    instrument: Instrument,
+    onAsk: (String) -> Unit,
+) {
+    val items = plan.signals + listOfNotNull(flowSignal)
+    TabBlock {
+        TabHeading("信号解读")
+        Text {
+            attr {
+                text("趋势、动能、量能均来自日 K 计算；资金来自最新交易日（如已接入）。")
+                fontSize(11f)
+                color(AppTheme.textTertiary)
+                marginTop(6f)
+            }
+        }
+        items.forEach { signal ->
+            View {
+                attr {
+                    marginTop(12f)
+                    backgroundColor(AppTheme.surfaceMuted)
+                    borderRadius(8f)
+                    paddingLeft(10f)
+                    paddingRight(10f)
+                    paddingTop(10f)
+                    paddingBottom(10f)
+                }
+                View {
+                    attr { flexDirectionRow(); alignItemsCenter() }
+                    Text {
+                        attr {
+                            text(signal.title)
+                            fontSize(12f)
+                            color(AppTheme.textTertiary)
+                        }
+                    }
+                    View { attr { flex(1f) } }
+                    Text {
+                        attr {
+                            text(signal.value)
+                            fontSize(14f)
+                            fontWeight600()
+                            color(AppTheme.toneColor(signal.tone))
+                        }
+                    }
+                }
+                Text {
+                    attr {
+                        text(signal.reading)
+                        fontSize(13f)
+                        lineHeight(20f)
+                        color(AppTheme.textSecondary)
+                        marginTop(6f)
+                    }
+                }
+            }
+        }
+        TabAskLink("问 AI 这些信号怎么看") {
+            onAsk("${instrument.name}当前趋势和量能信号怎么解读？")
+        }
+    }
+}
+
 private fun ViewContainer<*, *>.ActionLevelsCard(
     quote: Quote,
     analysis: TechnicalAnalysis,
     plan: DetailActionPlan,
 ) {
     TabBlock {
-        TabHeading("关注 / 压力点位")
+        TabHeading("买入 / 卖出观察点位")
         Text {
             attr {
                 text("由近 20 日高低点推算，仅作观察参考，不是下单指令。")
@@ -664,6 +793,16 @@ private fun ViewContainer<*, *>.ActionLevelsCard(
                             fontWeight600()
                             color(AppTheme.textPrimary)
                             marginTop(3f)
+                        }
+                    }
+                    if (level.gap.isNotBlank()) {
+                        Text {
+                            attr {
+                                text(level.gap)
+                                fontSize(10f)
+                                color(AppTheme.toneColor(level.tone))
+                                marginTop(3f)
+                            }
                         }
                     }
                     Text {
@@ -1042,8 +1181,8 @@ fun ViewContainer<*, *>.ChartFollowUpBar(vm: StockDetailViewModel, onAsk: () -> 
 private fun ViewContainer<*, *>.QuickAskPills(instrument: Instrument, onAsk: (String) -> Unit) {
     val items = listOf(
         "后市怎么看" to "${instrument.name}后市如何？",
+        "买卖点怎么看" to "${instrument.name}买入和卖出观察点大概在哪？",
         "主要风险" to "${instrument.name}有哪些风险？",
-        "估值水平" to "${instrument.name}的估值水平怎么看？",
         (if (instrument.isIndex) "成分股" else "同行对比") to
             if (instrument.isIndex) "${instrument.name}成分股表现如何？" else "${instrument.name}和同行业对比如何？",
     )

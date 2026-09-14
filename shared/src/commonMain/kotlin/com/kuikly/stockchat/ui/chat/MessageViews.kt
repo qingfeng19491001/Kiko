@@ -62,7 +62,6 @@ fun ViewContainer<*, *>.AssistantMessageView(
     onOpenInstrument: (String) -> Unit,
     onFollowUp: (String) -> Unit,
     onRetry: () -> Unit,
-    onSpeak: (ChatUiMessage) -> Unit,
     onFeedback: (ChatUiMessage, Int) -> Unit,
     onShare: (ChatUiMessage) -> Unit,
     onCopy: (String) -> Unit,
@@ -169,7 +168,7 @@ fun ViewContainer<*, *>.AssistantMessageView(
         vif({ message.status == MessageStatus.STREAMING }) {
             View { attr { width(8f); height(14f); borderRadius(1f); backgroundColor(AppTheme.ink); marginTop(4f) } }
         }
-        AnswerActionBar(message, onRetry, onSpeak, onFeedback, onShare)
+        AnswerActionBar(message, onRetry, onFeedback, onShare, onCopy)
         vif({ message.selectionMenuVisible }) {
             View {
                 attr {
@@ -366,29 +365,26 @@ internal fun ViewContainer<*, *>.ResearchStepRow(
 internal fun ViewContainer<*, *>.AnswerActionBar(
     message: ChatUiMessage,
     onRetry: () -> Unit,
-    onSpeak: (ChatUiMessage) -> Unit,
     onFeedback: (ChatUiMessage, Int) -> Unit,
     onShare: (ChatUiMessage) -> Unit,
+    onCopy: (String) -> Unit,
 ) {
     View {
         attr {
             flexDirectionRow(); alignItemsCenter()
             val visible = message.status == MessageStatus.DONE && message.blocks.isNotEmpty()
-            height(if (visible) 43f else 0f)
+            height(if (visible) 40f else 0f)
             opacity(if (visible) 1f else 0f)
             transform(Translate(0f, 0f, 0f, if (visible) 0f else 8f))
             overflow(false)
-            paddingTop(9f)
-            borderTop(Border(0.5f, BorderStyle.SOLID, AppTheme.divider))
+            paddingTop(10f)
             animate(Animation.easeOut(0.24f), visible)
         }
-        AnswerActionButton(if (message.isSpeaking) IconKind.SPEAKER_OFF else IconKind.SPEAKER, message.isSpeaking) { onSpeak(message) }
+        AnswerActionButton(IconKind.COPY, false) { onCopy(message.actionText()) }
         AnswerActionButton(IconKind.THUMBS_UP, message.feedback == 1) { onFeedback(message, 1) }
         AnswerActionButton(IconKind.THUMBS_DOWN, message.feedback == -1) { onFeedback(message, -1) }
         AnswerActionButton(IconKind.SHARE, false) { onShare(message) }
         AnswerActionButton(IconKind.REFRESH, false, onRetry)
-        View { attr { flex(1f) } }
-        Text { attr { text("行情有时效性 · 不构成投资建议"); fontSize(8f); color(AppTheme.textTertiary); lines(1) } }
     }
 }
 
@@ -399,11 +395,12 @@ internal fun ViewContainer<*, *>.AnswerActionButton(
 ) {
     View {
         attr {
-            size(32f, 30f); borderRadius(7f); allCenter(); marginRight(5f)
-            backgroundColor(if (selected) AppTheme.accentSoft else Color.TRANSPARENT)
+            size(36f, 36f)
+            allCenter()
+            marginRight(14f)
         }
         event { click { onClick() } }
-        Icon(icon, 15f, if (selected) AppTheme.accent else AppTheme.textSecondary, 1.6f)
+        Icon(icon, 18f, if (selected) AppTheme.accent else AppTheme.textSecondary, 1.7f)
     }
 }
 

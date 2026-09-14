@@ -218,7 +218,7 @@ private fun ViewContainer<*, *>.ChatLandingBanner(host: StockDetailScreenHost) {
             attr {
                 text(
                     host.chatSummary.ifBlank {
-                        "上方为实时行情与走势，下滑诊股可看摘要、点位与风险。"
+                        "上方为实时行情与走势，下滑诊股可看解读、点位、信号与风险。"
                     },
                 )
                 fontSize(12f)
@@ -319,6 +319,7 @@ private fun ViewContainer<*, *>.DetailBodySection(host: StockDetailScreenHost) {
                     flow = host.viewModel.capitalFlow,
                     loading = host.viewModel.capitalFlowLoading,
                     onAsk = { host.onAskAi("${host.detailInstrument.name}资金流向怎么样") },
+                    volumeRatio = analysis?.volumeRatio,
                 )
             }
             DetailTab.SECTOR -> SectorPane(

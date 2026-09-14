@@ -83,9 +83,6 @@ class ChatViewModel(
         )
     }
 
-    /** 顶部提示（如离线模式） */
-    var banner by observable("")
-
     /** 通知 UI 滚动到底部的信号（每次自增） */
     var scrollSignal by observable(0)
 
@@ -289,12 +286,6 @@ class ChatViewModel(
                         aiMessage.completeResearch(DateTime.currentTimestamp() - researchStartedAt)
                     }
                     isGenerating = false
-                    val snapshots = answer.relatedSnapshots
-                    if (snapshots.isNotEmpty() && snapshots.all { it.quote.isMock }) {
-                        banner = "部分行情接口不可用，已使用离线演示数据"
-                    } else if (snapshots.any { !it.quote.isMock }) {
-                        banner = ""
-                    }
                     persistCurrent()
                     requestScrollToBottom()
                     answer.relatedSnapshots.forEach { InstrumentCache.put(it.quote.instrument) }
@@ -366,10 +357,7 @@ class ChatViewModel(
         val check = verifyAttachments
         if (check != null && lastUser.attachments.isNotEmpty()) {
             check(lastUser.attachments) { ok ->
-                if (!ok) {
-                    banner = "附件已失效，无法重新生成"
-                    return@check
-                }
+                if (!ok) return@check
                 proceed()
             }
         } else {
