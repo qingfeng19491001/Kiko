@@ -183,6 +183,16 @@ kuikly-stock-chat/
 
 ## 设计亮点
 
+先对照课题评分维度给一个速览，后面逐条展开：
+
+| 评分维度 | 本项目证据 |
+| --- | --- |
+| **功能完整性** | Task 1 / Task 2 清单全项交付（见「完成任务情况」）；行情 → 详情 → 问答 → 追问形成闭环；多模态输入（图片 / 文档 / 语音）与朗读、分享、重新生成等收束操作齐全 |
+| **多平台支持** | Android / iOS / 鸿蒙三端同一套 `commonMain` 代码实证运行（上方三端截图 + [演示视频](docs/kiko-demo.mp4) + [Android APK](docs/kiko-android.apk)）；共享层 123 个 Kotlin 文件承载全部四个 `@Page` 与领域逻辑，平台侧只做宿主与原生桥 |
+| **代码质量** | 105 个单元测试全绿（`./gradlew :shared:testDebugUnitTest`）；页面 / 组件 / 数据 / 领域四层拆分；`:components` 无 `@Page` 独立演进；腾讯 GBK/UTF-8 行情契约解析与缺数 `--` 兜底，不用 Mock 冒充实时 |
+| **加分项 · 图表类型** | K 线（分时 / 五日 / 日周月 / 季年，主图 + 双副图）、分组柱状、相对走势折线、技术分仪表盘、涨跌柱、指数 sparkline；已沉淀为 [KuiklyKLineChart](https://github.com/qingfeng19491001/KuiklyKLineChart) / [KuiklyChart](https://github.com/qingfeng19491001/KuiklyChart) / [KuiklyTableView](https://github.com/qingfeng19491001/KuiklyTableView) 三个独立组件库回馈社区 |
+| **加分项 · 手势交互** | K 线十字光标选点（可带 OHLC 进聊天）、缩放平移；历史抽屉跟手拖拽 + 回弹；语音按住说话 / 松开发送 / 左滑取消 / 右滑编辑 |
+
 ### 模块化设计
 
 按页面 / 组件 / 数据 / 共享代码四层拆开，共享层占主导：四个 `@Page` 和领域逻辑都在 `commonMain`，Android / iOS / 鸿蒙宿主只注册原生桥，不复制业务页。
