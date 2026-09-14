@@ -146,13 +146,20 @@ kuikly-stock-chat/
 
 ## 设计亮点
 
-### 三端一套页
+### 模块化设计
 
-4 个 `@Page` 全在共享层。Android、iOS、鸿蒙均可出包，宿主只注册原生能力。
+按页面 / 组件 / 数据 / 共享代码四层拆开，共享层占主导：四个 `@Page` 和领域逻辑都在 `commonMain`，Android / iOS / 鸿蒙宿主只注册原生桥，不复制业务页。
 
-### 行情不造假
+| 层 | 实际落点 |
+| --- | --- |
+| 页面 | `shared/.../app`：`MarketList`、`StockDetail`、`StockChat`、`StockChatSettings` |
+| 组件 | `:components` 图表 / 表格 / Markdown；`shared/.../ui` 行情、详情、问答卡片 |
+| 数据 | `shared/.../data`：行情解析、百炼、附件与会话存储 |
+| 共享代码 | `shared/.../domain` 意图、研报拼装、技术分析；三端同一套 Kotlin |
 
-首页禁止 Mock 价。没有全市场成交明细就不画假涨跌分布、假主力。缺数显示 `--` 并提示不完整。连板 / 广度 / 资金只在本地 AKShare 网关有数时出现。
+### 接入真实行情 API
+
+列表报价和日 K 走腾讯财经（`web.sqt.gtimg.cn` 实时行情、`web.ifzq.gtimg.cn` `fqkline` / `minute`）。详情分时优先 iTick 分钟 K，失败再回退腾讯分时。连板 / 广度 / 资金只在本地 AKShare 网关有数时出现。缺数显示 `--` 并提示不完整，首页不用 Mock 价冒充实时。
 
 ### 卡片是证据，模型是文案
 
