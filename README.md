@@ -87,7 +87,7 @@ Android 8.0+ 真机可直接安装（debug 签名）。首次安装需允许「�
 
 ### 1. 环境
 
-- JDK 17+（鸿蒙链路建议本机 JBR 21，与 `gradle.properties` 一致）
+- JDK 17+；鸿蒙链路需 JDK 21（在 `~/.gradle/gradle.properties` 配 `org.gradle.java.home`，勿写进仓库，见 `gradle.properties` 注释）
 - Android Studio（Android 端）
 - Xcode + CocoaPods（iOS 端）
 - DevEco Studio（鸿蒙端）
@@ -106,9 +106,11 @@ cp shared/src/commonMain/kotlin/com/kuikly/stockchat/data/ai/AiSecrets.kt.exampl
 
 ### 3. 运行客户端
 
+**Android**：
+
 ```bash
 ./gradlew :androidApp:assembleDebug
-# APK：androidApp/build/outputs/apk/debug/androidApp-debug.apk
+adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk
 ```
 
 直达聊天：
@@ -117,8 +119,43 @@ cp shared/src/commonMain/kotlin/com/kuikly/stockchat/data/ai/AiSecrets.kt.exampl
 adb shell am start -n com.kuikly.stockchat/com.kuikly.stockchat.android.KuiklyRenderActivity --es pageName StockChat
 ```
 
-- **iOS**：`./gradlew :shared:podInstall` 后在 `iosApp` 执行 `pod install`，根页已是 `MarketList`。
-- **鸿蒙**：用 DevEco 打开 `ohosApp`。
+**iOS**：
+
+```bash
+./gradlew :shared:podInstall
+(cd iosApp && pod install)
+xcodebuild -workspace iosApp/KuiklyStockChat.xcworkspace -scheme KuiklyStockChat \
+  -configuration Debug -sdk iphonesimulator ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build
+# 产物在 DerivedData 的 Debug-iphonesimulator/KuiklyStockChat.app，根页已是 MarketList
+```
+
+**鸿蒙**：`kuikly-ohos-compile-plugin` 自动编译存在任务名问题，当前走手动链路（`hvigorfile.ts` 未挂该插件，无需额外关闭）：
+
+```bash
+# 1) 编译 KMP 共享层，产出 libshared.so（此链路需 JDK 21，
+#    建议在 ~/.gradle/gradle.properties 配 org.gradle.java.home）
+./gradlew -c settings.ohos.gradle.kts :shared:linkDebugSharedOhosArm64
+
+# 2) 拷贝产物到鸿蒙工程
+cp shared/build/bin/ohosArm64/debugShared/libshared.so ohosApp/entry/libs/arm64-v8a/
+cp shared/build/bin/ohosArm64/debugShared/libshared_api.h ohosApp/entry/src/main/cpp/include/
+
+# 3) 打 HAP（DevEco 自带 ohpm / hvigorw）
+cd ohosApp
+/Applications/DevEco-Studio.app/Contents/tools/ohpm/bin/ohpm install
+DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk \
+  /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw assembleHap --no-daemon
+```
+
+### 4. 构建产物与安装
+
+| 平台 | 产物 | 体积 | 安装与启动 |
+| --- | --- | --- | --- |
+| Android | `androidApp/build/outputs/apk/debug/androidApp-debug.apk` | ≈10 MB | `adb install -r <apk>`；`am start -n com.kuikly.stockchat/com.kuikly.stockchat.android.KuiklyRenderActivity` |
+| iOS（模拟器） | `Debug-iphonesimulator/KuiklyStockChat.app` | ≈32 MB | `xcrun simctl install <udid> <app>`；`xcrun simctl launch <udid> com.kuikly.stockchat` |
+| 鸿蒙 | `ohosApp/entry/build/default/outputs/default/entry-default-unsigned.hap` | ≈22 MB | `hdc install <hap>`；`hdc shell aa start -a EntryAbility -b com.kuikly.stockchat` |
+
+> 鸿蒙产物为 unsigned HAP，模拟器可直接安装；真机需在 DevEco Studio 配置签名证书。iOS 真机需自行配置签名后按 `iphoneos` SDK 出包。免构建体验可直接装 [docs/kiko-android.apk](docs/kiko-android.apk)（已预置评审配置）。
 
 ## 架构说明
 
