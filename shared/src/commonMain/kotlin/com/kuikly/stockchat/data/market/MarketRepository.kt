@@ -108,13 +108,15 @@ class MarketRepository(private val http: HttpClient) {
             return
         }
         // iOS NetworkModule 会把带逗号的 `q=hk00700,hkHSI` 整段判失败，详情单票却正常。
-        // 按单票拆开，和详情页同一条 URL 形态。
+        // 按单票拆开，有限并发，避免目录变长后串行拉价过慢。
         val fresh = linkedMapOf<String, Quote>()
-        fun fetchAt(index: Int) {
-            if (index >= pending.size) {
-                callback(cached + fresh)
-                return
-            }
+        var remaining = pending.size
+        var nextIndex = 0
+        val workers = minOf(6, pending.size)
+        fun startOne() {
+            val index = nextIndex
+            nextIndex += 1
+            if (index >= pending.size) return
             val instrument = pending[index]
             http.get(TencentMarketParser.quoteUrl(listOf(instrument))) { text, _ ->
                 text?.let { raw ->
@@ -127,10 +129,15 @@ class MarketRepository(private val http: HttpClient) {
                         fresh[instrument.key] = quote
                     }
                 }
-                fetchAt(index + 1)
+                remaining -= 1
+                if (remaining == 0) {
+                    callback(cached + fresh)
+                } else {
+                    startOne()
+                }
             }
         }
-        fetchAt(0)
+        repeat(workers) { startOne() }
     }
 
     fun loadQuotesOrMock(instruments: List<Instrument>, callback: (quotes: Map<String, Quote>, usedMock: Boolean) -> Unit) {
@@ -148,6 +155,67 @@ class MarketRepository(private val http: HttpClient) {
             callback(filled, usedMock)
         }
     }
+
+    /**
+     * 行情首页名单：腾讯排行榜实时吐票，失败时交回空列表由页面决定是否用目录兜底。
+     */
+    fun loadBoardInstruments(kind: BoardKind, callback: (List<Instrument>) -> Unit) {
+        if (offlineMode) {
+            callback(emptyList())
+            return
+        }
+        when (kind) {
+            BoardKind.ALL -> {
+                var cn: List<Instrument>? = null
+                var hk: List<Instrument>? = null
+                var us: List<Instrument>? = null
+                fun finish() {
+                    val a = cn ?: return
+                    val b = hk ?: return
+                    val c = us ?: return
+                    callback((a.take(30) + b.take(20) + c.take(20)).distinctBy { it.key })
+                }
+                loadBoardInstruments(BoardKind.CN) { cn = it; finish() }
+                loadBoardInstruments(BoardKind.HK) { hk = it; finish() }
+                loadBoardInstruments(BoardKind.US) { us = it; finish() }
+            }
+            BoardKind.CN -> http.get(
+                TencentBoardList.HS_RANK_URL,
+                TencentBoardList.hsRankParams(),
+                TencentBoardList.PAGE_HEADERS,
+            ) { text, _ -> callback(text?.let(TencentBoardList::parseAShareRank).orEmpty()) }
+            BoardKind.HK -> http.get(
+                TencentBoardList.HK_RANK_URL,
+                TencentBoardList.hkRankParams(),
+                TencentBoardList.PAGE_HEADERS,
+            ) { text, _ -> callback(text?.let(TencentBoardList::parseHkRank).orEmpty()) }
+            BoardKind.HK_CONNECT -> http.get(
+                TencentBoardList.GGT_URL,
+                TencentBoardList.ggtParams(),
+                TencentBoardList.PAGE_HEADERS,
+            ) { text, _ -> callback(text?.let(TencentBoardList::parseGgt).orEmpty()) }
+            BoardKind.US -> http.get(
+                SinaUsMarketList.LIST_URL,
+                SinaUsMarketList.params(),
+                SinaUsMarketList.PAGE_HEADERS,
+            ) { text, _ ->
+                val sina = text?.let(SinaUsMarketList::parse).orEmpty()
+                if (sina.isNotEmpty()) {
+                    callback(sina)
+                    return@get
+                }
+                http.get(
+                    TencentBoardList.US_RANK_URL,
+                    TencentBoardList.usRankParams(),
+                    TencentBoardList.PAGE_HEADERS,
+                ) { fallback, _ ->
+                    callback(fallback?.let(TencentBoardList::parseUsRank).orEmpty())
+                }
+            }
+        }
+    }
+
+    enum class BoardKind { ALL, CN, HK, HK_CONNECT, US }
 
     // endregion
 

@@ -1,6 +1,11 @@
 package com.kuikly.stockchat.ui.market
 
+import com.kuikly.stockchat.domain.model.IntradaySeries
 import com.kuikly.stockchat.domain.model.Instrument
+import com.kuikly.stockchat.domain.model.KLineBar
+import com.kuikly.stockchat.domain.model.Market
+import com.kuikly.stockchat.domain.model.MarketSnapshot
+import com.kuikly.stockchat.domain.model.MinuteTick
 import com.kuikly.stockchat.domain.model.Quote
 import com.kuikly.stockchat.domain.model.StockCatalog
 import kotlin.test.Test
@@ -34,6 +39,14 @@ class MarketListFilterTest {
         assertTrue(MarketListFilter.matches(StockCatalog.tencent, MarketBoard.HK_CONNECT, "", emptySet()))
         assertFalse(MarketListFilter.matches(StockCatalog.hsi, MarketBoard.HK_CONNECT, "", emptySet()))
         assertFalse(MarketListFilter.matches(StockCatalog.moutai, MarketBoard.HK_CONNECT, "", emptySet()))
+    }
+
+    @Test
+    fun hkConnectSearchKeepsHongKongHitsWithoutConnectFlag() {
+        val hsbc = Instrument("00005", "汇丰控股", Market.HK, stockConnect = false)
+        assertFalse(MarketListFilter.matches(hsbc, MarketBoard.HK_CONNECT, "", emptySet()))
+        assertTrue(MarketListFilter.matches(hsbc, MarketBoard.HK_CONNECT, "汇丰", emptySet()))
+        assertFalse(MarketListFilter.matches(StockCatalog.moutai, MarketBoard.HK_CONNECT, "茅台", emptySet()))
     }
 
     @Test
@@ -77,7 +90,11 @@ class MarketListFilterTest {
             ),
         )
         assertEquals(9_581_8634_0000.0 + 1_0137_1215_0000.0, built.turnoverYuan)
+        assertEquals(listOf("沪市", "深市"), built.turnoverShares.map { it.label })
+        assertEquals(9_581_8634_0000.0, built.turnoverShares[0].yuan)
         assertEquals("小盘股领跌", built.sizeHeadline)
+        assertEquals(32f, MarketOverviewCharts.sizeBarHeight(-2.12, built.sizeMaxAbs, 32f))
+        assertTrue(MarketOverviewCharts.sizeBarHeight(-0.84, built.sizeMaxAbs, 32f) < 32f)
         val hk = MarketOverviewStats.fromHongKong(
             mapOf(
                 StockCatalog.hsi.key to fakeQuote(StockCatalog.hsi, 2_284_3055.0, -0.60),
@@ -88,6 +105,27 @@ class MarketListFilterTest {
         assertEquals(2_284_3055.0 * 10_000.0, hk.turnoverYuan)
         assertEquals("恒指领跌", hk.sizeHeadline)
         assertEquals("指数对比", hk.sizeTitle)
+        assertTrue(hk.turnoverShares.isEmpty())
+    }
+
+    @Test
+    fun overviewLinePrefersLiveIntradayOverDailyCloses() {
+        val snap = MarketSnapshot(
+            quote = fakeQuote(StockCatalog.sse, 1.0),
+            dailyBars = listOf(
+                KLineBar("2026-08-01", 1.0, 10.0, 11.0, 9.0, 0.0),
+                KLineBar("2026-08-02", 1.0, 12.0, 13.0, 11.0, 0.0),
+            ),
+            intraday = IntradaySeries(
+                date = "2026-09-15",
+                prevClose = 10.0,
+                ticks = listOf(
+                    MinuteTick("09:30", 10.0, 0.0),
+                    MinuteTick("10:00", 9.94, 0.0),
+                ),
+            ),
+        )
+        assertEquals(listOf(10.0, 9.94), snap.overviewLine)
     }
 
     private fun fakeQuote(instrument: Instrument, turnover: Double, changePct: Double = 0.0): Quote {

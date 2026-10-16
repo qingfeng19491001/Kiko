@@ -10,13 +10,12 @@ import com.tencent.kuikly.core.base.Direction
 import com.tencent.kuikly.core.base.ViewContainer
 import com.tencent.kuikly.core.views.Text
 import com.tencent.kuikly.core.views.View
-import kotlin.math.abs
-import kotlin.math.max
 
-private val mintBar = Color(0xFFB6E3CFL)
-private val trackGray = Color(0xFFE8EAEDL)
-private val areaUp = Color(0x6612924AL)
-private val areaDown = Color(0x66D93B3BL)
+private val turnoverInk = Color(0xFF191919L)
+private val turnoverMuted = Color(0xFFC5CAD3L)
+private val areaUp = Color(0x3312924AL)
+private val areaDown = Color(0x33D93B3BL)
+private const val sizePlotHalf = 32f
 
 internal fun ViewContainer<*, *>.MarketIndexOverview(host: MarketListScreenHost) {
     val snaps = host.viewModel.overviewSnaps.toList()
@@ -42,8 +41,9 @@ internal fun ViewContainer<*, *>.MarketIndexOverview(host: MarketListScreenHost)
             if (snaps.isEmpty()) {
                 repeat(3) { MarketIndexColumnSkeleton() }
             } else {
+                val chartW = ((getPager().pageData.pageViewWidth - 16f) / snaps.size - 10f).coerceIn(76f, 128f)
                 snaps.forEach { snap ->
-                    MarketIndexColumn(snap) { host.onOpenInstrument(snap.quote.instrument) }
+                    MarketIndexColumn(snap, chartW) { host.onOpenInstrument(snap.quote.instrument) }
                 }
             }
         }
@@ -54,7 +54,11 @@ internal fun ViewContainer<*, *>.MarketIndexOverview(host: MarketListScreenHost)
     }
 }
 
-private fun ViewContainer<*, *>.MarketIndexColumn(snap: MarketSnapshot, onClick: () -> Unit) {
+private fun ViewContainer<*, *>.MarketIndexColumn(
+    snap: MarketSnapshot,
+    chartW: Float,
+    onClick: () -> Unit,
+) {
     val quote = snap.quote
     val color = AppTheme.changeColor(quote.change)
     View {
@@ -87,14 +91,15 @@ private fun ViewContainer<*, *>.MarketIndexColumn(snap: MarketSnapshot, onClick:
             }
         }
         View {
-            attr { height(40f); marginTop(8f) }
-            if (snap.sparkline.size >= 2) {
+            attr { height(48f); marginTop(8f); alignItemsCenter() }
+            if (snap.overviewLine.size >= 2) {
                 SparklineChart(
-                    values = snap.sparkline,
-                    width = 78f,
-                    height = 40f,
+                    values = snap.overviewLine,
+                    width = chartW,
+                    height = 48f,
                     color = color,
                     fillAlphaColor = if (quote.change >= 0) areaUp else areaDown,
+                    showEndDot = true,
                 )
             }
         }
@@ -132,8 +137,10 @@ private fun ViewContainer<*, *>.MarketStatsOverview(host: MarketListScreenHost, 
                             lines(1)
                         }
                     }
-                    View { attr { flex(1f); minHeight(16f) } }
-                    TurnoverBars()
+                    View { attr { flex(1f); minHeight(12f) } }
+                    if (stats.hasTurnoverShares) {
+                        TurnoverShareChart(stats.turnoverShares)
+                    }
                 }
             }
             if (stats.hasTurnover && stats.hasSize) {
@@ -153,13 +160,8 @@ private fun ViewContainer<*, *>.MarketStatsOverview(host: MarketListScreenHost, 
                             lines(1)
                         }
                     }
-                    View { attr { flex(1f); minHeight(12f) } }
-                    View {
-                        attr { flexDirectionRow(); alignItemsFlexEnd(); height(70f) }
-                        SizeBar(stats.largeLabel, stats.largePct)
-                        SizeBar(stats.midLabel, stats.midPct)
-                        SizeBar(stats.smallLabel, stats.smallPct)
-                    }
+                    View { attr { flex(1f); minHeight(8f) } }
+                    SizeCompareChart(stats)
                 }
             }
         }
@@ -185,22 +187,83 @@ private fun formatYi(value: Double?): String {
     return NumberFormat.fixed(value / 1_0000_0000.0, 0) + "亿"
 }
 
-private fun ViewContainer<*, *>.TurnoverBars() {
-    val heights = listOf(22f, 34f, 28f, 42f, 52f)
+private fun ViewContainer<*, *>.TurnoverShareChart(shares: List<MarketTurnoverShare>) {
     View {
-        attr { flexDirectionRow(); alignItemsFlexEnd(); height(52f) }
-        heights.forEachIndexed { index, height ->
-            if (index > 0) View { attr { width(7f) } }
+        attr {
+            height(8f)
+            flexDirectionRow()
+            overflow(true)
+            borderRadius(4f)
+            backgroundColor(AppTheme.surfaceMuted)
+        }
+        shares.forEachIndexed { index, share ->
             View {
                 attr {
-                    width(10f)
-                    height(height)
-                    borderRadius(5f)
-                    backgroundColor(if (index == heights.lastIndex) AppTheme.down else trackGray)
+                    flex(MarketOverviewCharts.turnoverWeight(share.yuan))
+                    height(8f)
+                    backgroundColor(if (index == 0) turnoverInk else turnoverMuted)
                 }
             }
         }
-        View { attr { flex(1f) } }
+    }
+    View {
+        attr { flexDirectionRow(); marginTop(10f) }
+        shares.forEachIndexed { index, share ->
+            if (index > 0) View { attr { width(12f) } }
+            View {
+                attr { flex(1f) }
+                View {
+                    attr { flexDirectionRow(); alignItemsCenter() }
+                    View {
+                        attr {
+                            size(6f, 6f)
+                            borderRadius(3f)
+                            backgroundColor(if (index == 0) turnoverInk else turnoverMuted)
+                        }
+                    }
+                    Text {
+                        attr {
+                            text(share.label)
+                            fontSize(11f)
+                            color(Color(0xFF8B8F97L))
+                            marginLeft(4f)
+                        }
+                    }
+                }
+                Text {
+                    attr {
+                        text(formatYi(share.yuan))
+                        fontSize(12f)
+                        fontWeight600()
+                        color(Color(0xFF191919L))
+                        marginTop(2f)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun ViewContainer<*, *>.SizeCompareChart(stats: MarketOverviewStats) {
+    val maxAbs = stats.sizeMaxAbs
+    View {
+        attr { height(sizePlotHalf * 2 + 36f) }
+        View {
+            attr {
+                positionAbsolute()
+                left(4f)
+                right(4f)
+                top(16f + sizePlotHalf)
+                height(0.5f)
+                backgroundColor(AppTheme.divider)
+            }
+        }
+        View {
+            attr { flexDirectionRow(); alignItemsStretch(); height(sizePlotHalf * 2 + 36f) }
+            SizeBar(stats.largeLabel, stats.largePct, maxAbs)
+            SizeBar(stats.midLabel, stats.midPct, maxAbs)
+            SizeBar(stats.smallLabel, stats.smallPct, maxAbs)
+        }
     }
 }
 
@@ -208,7 +271,7 @@ private fun ViewContainer<*, *>.MarketStatCard(content: ViewContainer<*, *>.() -
     View {
         attr {
             flex(1f)
-            minHeight(168f)
+            minHeight(196f)
             paddingTop(16f)
             paddingBottom(14f)
             paddingLeft(16f)
@@ -229,26 +292,75 @@ private fun ViewContainer<*, *>.MarketStatTitle(title: String) {
     }
 }
 
-private fun ViewContainer<*, *>.SizeBar(label: String, pct: Double?) {
+private fun ViewContainer<*, *>.SizeBar(label: String, pct: Double?, maxAbs: Double) {
     val color = pct?.let { AppTheme.changeColor(it) } ?: AppTheme.textTertiary
-    val barH = if (pct == null) 32f else max(32f, (32f + abs(pct).toFloat() / 2.2f * 20f).coerceAtMost(50f))
+    val up = (pct ?: 0.0) >= 0
+    val barH = MarketOverviewCharts.sizeBarHeight(pct, maxAbs, sizePlotHalf)
     View {
-        attr { flex(1f); alignItemsCenter(); justifyContentFlexEnd() }
-        Text {
-            attr {
-                text(if (pct == null) "--" else NumberFormat.signedPct(pct))
-                fontSize(10f)
-                fontWeight500()
-                color(color)
+        attr { flex(1f); alignItemsCenter() }
+        View {
+            attr { height(16f); allCenter() }
+            if (pct != null && up) {
+                Text {
+                    attr {
+                        text(NumberFormat.signedPct(pct))
+                        fontSize(10f)
+                        fontWeight500()
+                        color(color)
+                    }
+                }
             }
         }
         View {
-            attr {
-                width(26f)
-                height(barH)
-                marginTop(6f)
-                borderRadius(7f)
-                backgroundColor(mintBar)
+            attr { width(22f); height(sizePlotHalf * 2); alignItemsCenter() }
+            View {
+                attr {
+                    width(22f)
+                    height(sizePlotHalf)
+                    alignItemsCenter()
+                    justifyContentFlexEnd()
+                }
+                if (up) {
+                    View {
+                        attr {
+                            width(22f)
+                            height(barH)
+                            borderRadius(6f)
+                            backgroundColor(if (pct == null) AppTheme.surfaceMuted else color)
+                        }
+                    }
+                }
+            }
+            View {
+                attr {
+                    width(22f)
+                    height(sizePlotHalf)
+                    alignItemsCenter()
+                    justifyContentFlexStart()
+                }
+                if (!up) {
+                    View {
+                        attr {
+                            width(22f)
+                            height(barH)
+                            borderRadius(6f)
+                            backgroundColor(color)
+                        }
+                    }
+                }
+            }
+        }
+        View {
+            attr { height(16f); allCenter() }
+            if (pct != null && !up) {
+                Text {
+                    attr {
+                        text(NumberFormat.signedPct(pct))
+                        fontSize(10f)
+                        fontWeight500()
+                        color(color)
+                    }
+                }
             }
         }
         Text {
@@ -256,7 +368,7 @@ private fun ViewContainer<*, *>.SizeBar(label: String, pct: Double?) {
                 text(label)
                 fontSize(10f)
                 color(Color(0xFF8B8F97L))
-                marginTop(6f)
+                marginTop(2f)
             }
         }
     }
@@ -264,7 +376,7 @@ private fun ViewContainer<*, *>.SizeBar(label: String, pct: Double?) {
 
 private fun ViewContainer<*, *>.MarketIndexColumnSkeleton() {
     View {
-        attr { flex(1f); height(96f); alignItemsCenter(); padding(8f) }
+        attr { flex(1f); height(112f); alignItemsCenter(); padding(8f) }
         View { attr { width(48f); height(10f); borderRadius(3f); backgroundColor(AppTheme.surfaceMuted) } }
         View { attr { width(64f); height(16f); borderRadius(3f); backgroundColor(AppTheme.surfaceMuted); marginTop(8f) } }
         View { attr { width(40f); height(10f); borderRadius(3f); backgroundColor(AppTheme.surfaceMuted); marginTop(6f) } }

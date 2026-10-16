@@ -7,10 +7,12 @@ import com.kuikly.stockchat.ui.components.Icon
 import com.kuikly.stockchat.ui.components.IconKind
 import com.kuikly.stockchat.ui.components.InstrumentAvatar
 import com.kuikly.stockchat.ui.theme.AppTheme
+import com.tencent.kuikly.core.base.Animation
 import com.tencent.kuikly.core.base.Color
 import com.tencent.kuikly.core.base.ColorStop
 import com.tencent.kuikly.core.base.Direction
 import com.tencent.kuikly.core.base.attr.ImageUri
+import com.tencent.kuikly.core.base.Translate
 import com.tencent.kuikly.core.base.ViewBuilder
 import com.tencent.kuikly.core.base.ViewContainer
 import com.tencent.kuikly.core.directives.vbind
@@ -66,7 +68,7 @@ internal fun MarketListScreen(
             attr { flex(1f); showScrollerIndicator(false) }
             vif({ host.viewModel.board != MarketBoard.WATCH }) {
                 vbind({
-                    "${host.viewModel.board.name}-${host.viewModel.overviewSnaps.size}-${host.viewModel.overviewLoading}-${host.viewModel.overviewStats?.turnoverYuan}-${host.viewModel.overviewStats?.sizeHeadline}"
+                    "${host.viewModel.board.name}-${host.viewModel.overviewEpoch}-${host.viewModel.overviewSnaps.size}-${host.viewModel.overviewLoading}-${host.viewModel.overviewStats?.turnoverYuan}-${host.viewModel.overviewStats?.sizeHeadline}"
                 }) {
                     View {
                         MarketIndexOverview(host)
@@ -279,6 +281,8 @@ private val quoteSegments = listOf(
 )
 
 private fun ViewContainer<*, *>.MarketSegmentBar(host: MarketListScreenHost) {
+    val pad = 3f
+    val count = quoteSegments.size
     View {
         attr {
             height(44f)
@@ -289,31 +293,43 @@ private fun ViewContainer<*, *>.MarketSegmentBar(host: MarketListScreenHost) {
         View {
             attr {
                 height(44f)
-                padding(3f)
+                padding(pad)
                 borderRadius(22f)
                 backgroundColor(Color.WHITE)
                 flexDirectionRow()
                 alignItemsCenter()
+                overflow(false)
+            }
+            View {
+                attr {
+                    val index = quoteSegments.indexOf(host.viewModel.board).coerceAtLeast(0)
+                    val track = (getPager().pageData.pageViewWidth - 32f - pad * 2f).coerceAtLeast(0f)
+                    val pillW = if (count > 0) track / count else 0f
+                    absolutePosition(left = pad, top = pad)
+                    size(pillW, 38f)
+                    borderRadius(19f)
+                    backgroundColor(Color(0xFF191919L))
+                    transform(Translate(index.toFloat(), 0f))
+                    animate(Animation.easeInOut(0.22f), index)
+                }
             }
             quoteSegments.forEach { item ->
-                vbind({ host.viewModel.board.name }) {
-                    val selected = host.viewModel.board == item
-                    View {
+                View {
+                    attr {
+                        flex(1f)
+                        height(38f)
+                        allCenter()
+                        zIndex(1)
+                    }
+                    event { click { host.onSelectBoard(item) } }
+                    Text {
                         attr {
-                            flex(1f)
-                            height(38f)
-                            borderRadius(19f)
-                            allCenter()
-                            backgroundColor(if (selected) Color(0xFF191919L) else Color.TRANSPARENT)
-                        }
-                        event { click { host.onSelectBoard(item) } }
-                        Text {
-                            attr {
-                                text(item.label)
-                                fontSize(12f)
-                                fontWeight600()
-                                color(if (selected) Color.WHITE else Color(0xFF8B8F97L))
-                            }
+                            val selected = host.viewModel.board == item
+                            text(item.label)
+                            fontSize(12f)
+                            fontWeight600()
+                            color(if (selected) Color.WHITE else Color(0xFF8B8F97L))
+                            animate(Animation.easeInOut(0.18f), selected)
                         }
                     }
                 }

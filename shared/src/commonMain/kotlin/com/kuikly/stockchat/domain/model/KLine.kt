@@ -89,4 +89,11 @@ data class MarketSnapshot(
     /** 近 30 个交易日收盘价，用于迷你走势图 */
     val sparkline: List<Double>
         get() = dailyBars.takeLast(30).map { it.close }
+
+    /** 行情首页指数图：优先当日分时，没有分时再退回日 K 收盘。 */
+    val overviewLine: List<Double>
+        get() {
+            val session = intraday?.ticks?.map { it.price }.orEmpty()
+            return if (session.size >= 2) session else sparkline
+        }
 }

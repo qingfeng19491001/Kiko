@@ -54,18 +54,24 @@ object MarketBoardOverview {
 
     fun listTitle(board: MarketBoard): String = when (board) {
         MarketBoard.WATCH -> "自选"
-        MarketBoard.CN -> "A股列表"
-        MarketBoard.HK -> "港股列表"
-        MarketBoard.HK_CONNECT -> "港股通"
-        MarketBoard.US -> "美股列表"
-        MarketBoard.ALL -> "股票列表"
+        MarketBoard.CN -> "A股成交额"
+        MarketBoard.HK -> "港股成交额"
+        MarketBoard.HK_CONNECT -> "港股通涨跌"
+        MarketBoard.US -> "美股市值"
+        MarketBoard.ALL -> "成交额排行"
         else -> "股票列表"
     }
 }
 
+internal data class MarketTurnoverShare(
+    val label: String,
+    val yuan: Double,
+)
+
 internal data class MarketOverviewStats(
     val turnoverYuan: Double?,
     val turnoverPrefix: String,
+    val turnoverShares: List<MarketTurnoverShare> = emptyList(),
     val sizeTitle: String,
     val largeLabel: String,
     val midLabel: String,
@@ -77,8 +83,11 @@ internal data class MarketOverviewStats(
     val sizeInstrument: Instrument,
 ) {
     val hasTurnover: Boolean get() = turnoverYuan != null && turnoverYuan > 0
+    val hasTurnoverShares: Boolean get() = turnoverShares.size >= 2 && turnoverShares.all { it.yuan > 0 }
     val hasSize: Boolean get() = largePct != null || midPct != null || smallPct != null
     val isEmpty: Boolean get() = !hasTurnover && !hasSize
+    val sizeMaxAbs: Double
+        get() = listOfNotNull(largePct, midPct, smallPct).maxOfOrNull { kotlin.math.abs(it) }?.coerceAtLeast(0.4) ?: 0.4
 
     val sizeHeadline: String
         get() {
@@ -106,10 +115,16 @@ internal data class MarketOverviewStats(
         fun fromAShare(quotes: Map<String, Quote>): MarketOverviewStats {
             val sse = quotes[StockCatalog.sse.key]
             val szse = quotes[StockCatalog.szse.key]
-            val turnover = listOfNotNull(sse?.turnover, szse?.turnover).takeIf { it.size == 2 }?.sum()
+            val sseTurnover = sse?.turnover?.takeIf { it > 0 }
+            val szseTurnover = szse?.turnover?.takeIf { it > 0 }
+            val turnover = listOfNotNull(sseTurnover, szseTurnover).takeIf { it.size == 2 }?.sum()
             return MarketOverviewStats(
                 turnoverYuan = turnover,
                 turnoverPrefix = "两市共",
+                turnoverShares = listOfNotNull(
+                    sseTurnover?.let { MarketTurnoverShare("沪市", it) },
+                    szseTurnover?.let { MarketTurnoverShare("深市", it) },
+                ),
                 sizeTitle = "大小盘对比",
                 largeLabel = "大盘股",
                 midLabel = "中盘股",
@@ -129,6 +144,7 @@ internal data class MarketOverviewStats(
             return MarketOverviewStats(
                 turnoverYuan = turnover,
                 turnoverPrefix = "港股",
+                turnoverShares = emptyList(),
                 sizeTitle = "指数对比",
                 largeLabel = "恒指",
                 midLabel = "恒科",
@@ -143,6 +159,15 @@ internal data class MarketOverviewStats(
     }
 }
 
+internal object MarketOverviewCharts {
+    fun sizeBarHeight(pct: Double?, maxAbs: Double, maxHeight: Float): Float {
+        if (pct == null || maxAbs <= 0.0) return 6f
+        return (kotlin.math.abs(pct) / maxAbs * maxHeight).toFloat().coerceIn(6f, maxHeight)
+    }
+
+    fun turnoverWeight(yuan: Double): Float = yuan.toFloat().coerceAtLeast(1f)
+}
+
 object MarketListFilter {
     fun matches(
         instrument: Instrument,
@@ -154,7 +179,10 @@ object MarketListFilter {
         if (board == MarketBoard.INDEX && !instrument.isIndex) return false
         if (board == MarketBoard.CN && instrument.market != Market.SH && instrument.market != Market.SZ) return false
         if (board == MarketBoard.HK && instrument.market != Market.HK) return false
-        if (board == MarketBoard.HK_CONNECT && !instrument.stockConnect) return false
+        if (board == MarketBoard.HK_CONNECT) {
+            if (instrument.market != Market.HK) return false
+            if (query.trim().isEmpty() && !instrument.stockConnect) return false
+        }
         if (board == MarketBoard.US && instrument.market != Market.US) return false
         val needle = query.trim()
         if (needle.isEmpty()) return true

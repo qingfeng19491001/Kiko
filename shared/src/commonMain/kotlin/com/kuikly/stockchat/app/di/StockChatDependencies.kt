@@ -25,6 +25,7 @@ internal fun createMarketListViewModel(pager: Pager): MarketListViewModel {
     return MarketListViewModel(
         marketRepository = MarketRepository(http),
         watchlistRepository = WatchlistRepository(store),
+        symbolSearch = TencentSymbolSearch(http),
     )
 }
 

@@ -30,11 +30,12 @@ fun ViewContainer<*, *>.SparklineChart(
     height: Float,
     color: Color,
     fillAlphaColor: Color,
+    showEndDot: Boolean = false,
 ) {
     Canvas({
         attr { size(width, height) }
     }) { ctx, w, h ->
-        ChartPainter.sparkline(ctx, values, w, h, color, fillAlphaColor)
+        ChartPainter.sparkline(ctx, values, w, h, color, fillAlphaColor, showEndDot)
     }
 }
 
@@ -292,21 +293,31 @@ object ChartPainter {
         ctx.fillText(label, cx, cy + 16f)
     }
 
-    fun sparkline(ctx: CanvasContext, values: List<Double>, w: Float, h: Float, color: Color, fill: Color) {
+    fun sparkline(
+        ctx: CanvasContext,
+        values: List<Double>,
+        w: Float,
+        h: Float,
+        color: Color,
+        fill: Color,
+        showEndDot: Boolean = false,
+    ) {
         if (values.size < 2) return
-        val minV = values.min()
-        val maxV = values.max()
+        val sampled = downsample(values, 48)
+        val minV = sampled.min()
+        val maxV = sampled.max()
         val range = (maxV - minV).takeIf { it > 0 } ?: 1.0
-        val padY = 2f
-        val stepX = w / (values.size - 1)
-        fun px(i: Int) = i * stepX
+        val padX = if (showEndDot) 3.4f else 0f
+        val padY = if (showEndDot) 4f else 2f
+        val plotW = (w - padX * 2).coerceAtLeast(1f)
+        val stepX = plotW / (sampled.size - 1)
+        fun px(i: Int) = padX + i * stepX
         fun py(v: Double) = (h - padY) - ((v - minV) / range * (h - padY * 2)).toFloat()
 
-        // 填充
         ctx.beginPath()
-        ctx.moveTo(0f, h)
-        values.forEachIndexed { i, v -> ctx.lineTo(px(i), py(v)) }
-        ctx.lineTo(w, h)
+        ctx.moveTo(px(0), h)
+        sampled.forEachIndexed { i, v -> ctx.lineTo(px(i), py(v)) }
+        ctx.lineTo(px(sampled.lastIndex), h)
         ctx.closePath()
         val gradient = ctx.createLinearGradient(0f, 0f, 0f, h)
         gradient.addColorStop(0f, fill)
@@ -314,13 +325,36 @@ object ChartPainter {
         ctx.fillStyle(gradient)
         ctx.fill()
 
-        // 折线
         ctx.beginPath()
         ctx.strokeStyle(color)
         ctx.lineWidth(1.6f)
         ctx.lineCapRound()
-        values.forEachIndexed { i, v -> if (i == 0) ctx.moveTo(px(i), py(v)) else ctx.lineTo(px(i), py(v)) }
+        sampled.forEachIndexed { i, v -> if (i == 0) ctx.moveTo(px(i), py(v)) else ctx.lineTo(px(i), py(v)) }
         ctx.stroke()
+
+        if (showEndDot) {
+            val endX = px(sampled.lastIndex)
+            val endY = py(sampled.last())
+            ctx.fillStyle(Color.WHITE)
+            ctx.beginPath()
+            ctx.arc(endX, endY, 3.2f, 0f, (2 * PI).toFloat(), false)
+            ctx.closePath()
+            ctx.fill()
+            ctx.fillStyle(color)
+            ctx.beginPath()
+            ctx.arc(endX, endY, 2.1f, 0f, (2 * PI).toFloat(), false)
+            ctx.closePath()
+            ctx.fill()
+        }
+    }
+
+    private fun downsample(values: List<Double>, maxPoints: Int): List<Double> {
+        if (values.size <= maxPoints) return values
+        val last = values.size - 1
+        return List(maxPoints) { i ->
+            val src = i * last / (maxPoints - 1)
+            values[src]
+        }
     }
 
     fun intraday(ctx: CanvasContext, series: IntradaySeries, w: Float, h: Float) {
